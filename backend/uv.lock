@@ -2794,6 +2794,7 @@ dependencies = [
     { name = "scipy-stubs" },
     { name = "sqlalchemy" },
     { name = "streamz" },
+    { name = "tqdm" },
     { name = "vosk" },
     { name = "websockets" },
 ]
@@ -2830,6 +2831,7 @@ requires-dist = [
     { name = "scipy-stubs", specifier = ">=1.16.1.0" },
     { name = "sqlalchemy", specifier = ">=2.0.43" },
     { name = "streamz", specifier = ">=0.6.4" },
+    { name = "tqdm", specifier = ">=4.67.1" },
     { name = "vosk", specifier = ">=0.3.45" },
     { name = "websockets", specifier = ">=15.0.1" },
 ]

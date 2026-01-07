@@ -25,6 +25,7 @@ dependencies = [
     "scipy-stubs>=1.16.1.0",
     "sqlalchemy>=2.0.43",
     "streamz>=0.6.4",
+    "tqdm>=4.67.1",
     "vosk>=0.3.45",
     "websockets>=15.0.1",
 ]
