@@ -8,6 +8,7 @@ from deepeval.test_case import LLMTestCase
 import os
 import csv
 import argparse
+import time
 import json
 from typing import Any
 
@@ -186,6 +187,7 @@ for run_idx, eval_result in enumerate(results):
 
             row[f"{metric.name}_score"] = metric.score
             row[f"{metric.name}_success"] = metric.success
+            row[f"{metric.name}_reason"] = str(metric.reason)
 
         rows.append(row)
 
@@ -200,7 +202,9 @@ fieldnames = sorted(
     ),
 )
 
-with open("long_result.csv", "w", newline="", encoding="utf-8") as f:
+with open(
+    f"long_result-{int(time.time())}.csv", "w", newline="", encoding="utf-8"
+) as f:
     writer = csv.DictWriter(f, fieldnames=fieldnames)
     writer.writeheader()
     writer.writerows(rows)

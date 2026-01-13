@@ -11,6 +11,7 @@ from langchain.agents import create_agent
 from pydantic import BaseModel
 from textwrap import dedent
 import logging
+from langchain.agents.structured_output import ProviderStrategy
 
 """Simple interview analyzer with LLM."""
 
@@ -64,7 +65,9 @@ class SimpleAnalyzer:
         )
 
         self.llm = create_agent(  # pyright: ignore[reportUnannotatedClassAttribute, reportUnknownMemberType]
-            llm, response_format=Analysis, system_prompt=self.SYSTEM_PROMPT
+            llm,
+            response_format=ProviderStrategy(Analysis),
+            system_prompt=self.SYSTEM_PROMPT,
         )
 
         self.db: PersistentDatabase = db
