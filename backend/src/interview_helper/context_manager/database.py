@@ -379,3 +379,53 @@ def add_ai_analysis(
         )
 
     return AnalysisId.from_str(analysis_id)
+
+
+def full_text_search_transcriptions(
+    db: PersistentDatabase, project_id: ProjectId, fts5_query: str
+) -> list[str]:
+    """
+    Performs a full-text search on transcriptions, returning a list of tuples
+    (transcription_id, text_output) that match the query.
+    """
+    with db.begin() as conn:
+        rows = conn.execute(
+            sa.text(
+                """
+                SELECT t.transcription_id AS "transcription_id", t.text_output as "text_output"
+                FROM transcriptions_fts f
+                JOIN transcriptions t
+                    ON t.rowid = f.rowid
+                WHERE f.text_output MATCH :query 
+                      AND t.project_id = :project_id;
+                """
+            ),
+            {"query": fts5_query, "project_id": str(project_id)},
+        ).all()
+
+    return [row.text_output for row in rows]  # pyright: ignore[reportAny]
+
+
+def full_text_search_ai_analysis(
+    db: PersistentDatabase, project_id: ProjectId, fts5_query: str
+) -> list[str]:
+    """
+    Performs a full-text search on AI analyses, returning a list of tuples
+    (analysis_id, text) that match the query.
+    """
+    with db.begin() as conn:
+        rows = conn.execute(
+            sa.text(
+                """
+                SELECT t.analysis_id AS "analysis_id", t.text as "text"
+                FROM ai_analyses_fts f
+                JOIN ai_analyses t
+                    ON t.rowid = f.rowid
+                WHERE f.text MATCH :query 
+                      AND t.project_id = :project_id;
+                """
+            ),
+            {"query": fts5_query, "project_id": str(project_id)},
+        ).all()
+
+    return [row.text for row in rows]  # pyright: ignore[reportAny]
