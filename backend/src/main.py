@@ -322,21 +322,33 @@ async def websocket_endpoint(
     try:
         async with cws:
             async with BlockingPortal() as portal:
-                await context.register(ANYIO_BLOCKING_PORTAL, portal)
-                await context.register(WEBSOCKET, cws)
+                try:
+                    await context.register(ANYIO_BLOCKING_PORTAL, portal)
+                    await context.register(WEBSOCKET, cws)
 
-                # Send catchup message with current transcript and insights
-                transcripts = get_all_transcripts(session_manager.db, project_id_typed)
-                transcript_text = " ".join(transcripts)
+                    # Send catchup message with current transcript and insights
+                    transcripts = get_all_transcripts(
+                        session_manager.db, project_id_typed
+                    )
+                    transcript_text = " ".join(
+                        [transcript["text_output"] for transcript in transcripts]
+                    )
 
-                ai_analyses = get_all_ai_analyses(session_manager.db, project_id_typed)
-                insights = [analysis for analysis in ai_analyses if analysis]
+                    ai_analyses = get_all_ai_analyses(
+                        session_manager.db, project_id_typed
+                    )
+                    insights = [analysis for analysis in ai_analyses if analysis]
 
-                catchup_msg = CatchupMessage(
-                    transcript=transcript_text,
-                    insights=insights,
-                )
-                await cws.send_message(catchup_msg)
+                    catchup_msg = CatchupMessage(
+                        transcript=transcript_text,
+                        insights=insights,
+                    )
+                    await cws.send_message(catchup_msg)
+                except Exception as e:
+                    logger.error(
+                        f"Error during session setup for session {context.session_id}: {e}"
+                    )
+                    raise e
 
                 # Send project metadata
                 metadata_msg = ProjectMetadataMessage(

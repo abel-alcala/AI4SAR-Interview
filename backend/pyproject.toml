@@ -15,6 +15,7 @@ dependencies = [
     "httpx>=0.27.0",
     "langchain>=1.0.2",
     "langchain-azure-ai>=1.0.0",
+    "langfuse>=3.12.0",
     "langgraph>=1.0.1",
     "numpy>=2.3.1",
     "pydantic>=2.11.7",

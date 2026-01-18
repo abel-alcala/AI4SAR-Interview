@@ -401,6 +401,9 @@ class AppContextManager:
                             project_id=job.project_id,
                             text=result.question,
                             span=result.grounding_span,
+                            transcript_context_start=results.transcript_context_start,
+                            transcript_context_end=results.transcript_context_end,
+                            summary=results.summary,
                         )
 
                         analyses.append(
@@ -409,6 +412,9 @@ class AppContextManager:
                                 text=result.question,
                                 span=result.grounding_span,
                                 is_dismissed=False,
+                                transcript_context_start=results.transcript_context_start,
+                                transcript_context_end=results.transcript_context_end,
+                                summary=results.summary,
                             )
                         )
 

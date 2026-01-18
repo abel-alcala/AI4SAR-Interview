@@ -59,18 +59,6 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("project_id"),
     )
     _ = op.create_table(
-        "ai_analyses",
-        sa.Column("analysis_id", sa.String(length=26), nullable=False),
-        sa.Column("project_id", sa.String(length=26), nullable=False),
-        sa.Column("text", sa.Text(), nullable=False),
-        sa.Column("span", sa.Text(), nullable=True),
-        sa.ForeignKeyConstraint(
-            ["project_id"],
-            ["project.project_id"],
-        ),
-        sa.PrimaryKeyConstraint("analysis_id"),
-    )
-    _ = op.create_table(
         "transcriptions",
         sa.Column("transcription_id", sa.String(length=26), nullable=False),
         sa.Column("project_id", sa.String(length=26), nullable=False),
@@ -97,6 +85,29 @@ def upgrade() -> None:
             ["users.user_id"],
         ),
         sa.PrimaryKeyConstraint("transcription_id"),
+    )
+    _ = op.create_table(
+        "ai_analyses",
+        sa.Column("analysis_id", sa.String(length=26), nullable=False),
+        sa.Column("project_id", sa.String(length=26), nullable=False),
+        sa.Column("text", sa.Text(), nullable=False),
+        sa.Column("span", sa.Text(), nullable=True),
+        sa.Column("transcript_context_start", sa.String(length=26), nullable=False),
+        sa.Column("transcript_context_end", sa.String(length=26), nullable=False),
+        sa.Column("summary", sa.Text(), nullable=False),
+        sa.ForeignKeyConstraint(
+            ["project_id"],
+            ["project.project_id"],
+        ),
+        sa.ForeignKeyConstraint(
+            ["transcript_context_start"],
+            ["transcriptions.transcription_id"],
+        ),
+        sa.ForeignKeyConstraint(
+            ["transcript_context_end"],
+            ["transcriptions.transcription_id"],
+        ),
+        sa.PrimaryKeyConstraint("analysis_id"),
     )
     _ = op.create_table(
         "dismissed_ai_analyses",

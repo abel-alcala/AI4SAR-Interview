@@ -122,3 +122,6 @@ class AIQuestion:
 @dataclass(frozen=True)
 class AIResult:
     questions: list[AIQuestion]
+    transcript_context_start: TranscriptId
+    transcript_context_end: TranscriptId
+    summary: str

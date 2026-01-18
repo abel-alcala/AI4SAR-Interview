@@ -25,6 +25,9 @@ def test_cors_origins_list_string_parsing():
         AZURE_EVAL_DEPLOYMENT="gpt-4o-mini",
         AZURE_SPEECH_KEY=None,
         AZURE_SPEECH_REGION=None,
+        LANGFUSE_SECRET_KEY=None,
+        LANGFUSE_PUBLIC_KEY=None,
+        LANGFUSE_BASE_URL=None,
     )
     assert settings.cors_allow_origins == [origin1, origin2]
 
@@ -42,6 +45,9 @@ def test_empty_cors_origins_raises_error():
             AZURE_EVAL_DEPLOYMENT="gpt-4o-mini",
             AZURE_SPEECH_KEY=None,
             AZURE_SPEECH_REGION=None,
+            LANGFUSE_SECRET_KEY=None,
+            LANGFUSE_PUBLIC_KEY=None,
+            LANGFUSE_BASE_URL=None,
         )
 
 
@@ -96,6 +102,9 @@ def test_settings_immutability():
         AZURE_EVAL_DEPLOYMENT="gpt-4o-mini",
         AZURE_SPEECH_KEY=None,
         AZURE_SPEECH_REGION=None,
+        LANGFUSE_SECRET_KEY=None,
+        LANGFUSE_PUBLIC_KEY=None,
+        LANGFUSE_BASE_URL=None,
     )
 
     with pytest.raises(ValidationError, match="frozen"):
@@ -118,6 +127,9 @@ def test_azure_speech_settings():
         AZURE_EVAL_DEPLOYMENT="gpt-4o-mini",
         AZURE_SPEECH_KEY="abc123",  # pyright: ignore[reportArgumentType]
         AZURE_SPEECH_REGION="westus",
+        LANGFUSE_SECRET_KEY=None,
+        LANGFUSE_PUBLIC_KEY=None,
+        LANGFUSE_BASE_URL=None,
     )
     assert instance.azure_speech_key == SecretStr("abc123")
     assert instance.azure_speech_region == "westus"
@@ -138,6 +150,9 @@ def test_azure_speech_one_throws_error():
             AZURE_EVAL_DEPLOYMENT="gpt-4o-mini",
             AZURE_SPEECH_KEY="abc123",  # pyright: ignore[reportArgumentType]
             AZURE_SPEECH_REGION=None,
+            LANGFUSE_SECRET_KEY=None,
+            LANGFUSE_PUBLIC_KEY=None,
+            LANGFUSE_BASE_URL=None,
         )
     with pytest.raises(ValueError, match="together or not at all"):
         _instance = Settings(
@@ -152,4 +167,7 @@ def test_azure_speech_one_throws_error():
             AZURE_EVAL_DEPLOYMENT="gpt-4o-mini",
             AZURE_SPEECH_KEY=None,
             AZURE_SPEECH_REGION="westus",
+            LANGFUSE_SECRET_KEY=None,
+            LANGFUSE_PUBLIC_KEY=None,
+            LANGFUSE_BASE_URL=None,
         )
