@@ -160,6 +160,9 @@ async def finalize_audio_stream(ctx: SessionContext):
     peer_connection = await ctx.get_or_wait(WEBRTC_PEER_CONNECTION)
     await peer_connection.close()
 
+    # Unregister the peer connection so a new one can be created on reconnection
+    await ctx.unregister(WEBRTC_PEER_CONNECTION)
+
     for _, finalizer in ctx.manager.audio_ingest_consumers:
         await finalizer(ctx)
 

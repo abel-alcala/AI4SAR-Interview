@@ -79,6 +79,15 @@ class SessionContext:
     async def get_or_wait(self, key: ResourceKey[T]):
         return await self.manager.get_or_wait(self.session_id, key)
 
+    async def unregister(self, key: ResourceKey[T]) -> None:
+        """
+        Unregisters the resource from the store
+
+        Raises:
+            Assertion Error: If resource not registered.
+        """
+        return await self.manager.unregister(session_id=self.session_id, key=key)
+
     def get_settings(self) -> Settings:
         return self.manager.get_settings()
 
@@ -249,6 +258,28 @@ class AppContextManager:
             assert session_id in self.active_sessions, f"{session_id} is not active!"
 
             return cast(T, self.store.get((key, session_id), None))
+
+    async def unregister(self, session_id: SessionId, key: ResourceKey[T]) -> None:
+        """
+        Unregisters the resource from the store
+
+        Raises:
+            Assertion Error: If resource not registered.
+        """
+        k = (key, session_id)
+
+        async with self.lock:
+            assert session_id in self.active_sessions, f"{session_id} is not active!"
+            assert k in self.store, (
+                f"{key.name} not registered for SessionId({session_id})"
+            )
+
+            del self.store[k]
+            self.store_keys[session_id].remove(k)
+
+            # Clean up waiting event if it exists
+            if k in self.waiting_events:
+                del self.waiting_events[k]
 
     async def get_or_wait(self, session_id: SessionId, key: ResourceKey[T]) -> T:
         async with self.lock:
