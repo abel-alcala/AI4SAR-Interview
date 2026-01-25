@@ -330,9 +330,10 @@ async def websocket_endpoint(
                     transcripts = get_all_transcripts(
                         session_manager.db, project_id_typed
                     )
-                    transcript_text = " ".join(
-                        [transcript["text_output"] for transcript in transcripts]
-                    )
+                    # Send each transcript entry as a separate string for bottom-to-top display
+                    transcript_list = [
+                        transcript["text_output"] for transcript in transcripts
+                    ]
 
                     ai_analyses = get_all_ai_analyses(
                         session_manager.db, project_id_typed
@@ -340,7 +341,7 @@ async def websocket_endpoint(
                     insights = [analysis for analysis in ai_analyses if analysis]
 
                     catchup_msg = CatchupMessage(
-                        transcript=transcript_text,
+                        transcript=transcript_list,
                         insights=insights,
                     )
                     await cws.send_message(catchup_msg)

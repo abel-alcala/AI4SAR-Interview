@@ -59,7 +59,7 @@ export interface AnalysisRow {
 export interface CatchupMessage {
     type: typeof MessageType.CATCHUP;
     timestamp: string;
-    transcript: string;
+    transcript: string[];
     insights: AnalysisRow[];
 }
 
