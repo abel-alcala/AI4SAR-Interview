@@ -59,18 +59,6 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("project_id"),
     )
     _ = op.create_table(
-        "ai_analyses",
-        sa.Column("analysis_id", sa.String(length=26), nullable=False),
-        sa.Column("project_id", sa.String(length=26), nullable=False),
-        sa.Column("text", sa.Text(), nullable=False),
-        sa.Column("span", sa.Text(), nullable=True),
-        sa.ForeignKeyConstraint(
-            ["project_id"],
-            ["project.project_id"],
-        ),
-        sa.PrimaryKeyConstraint("analysis_id"),
-    )
-    _ = op.create_table(
         "transcriptions",
         sa.Column("transcription_id", sa.String(length=26), nullable=False),
         sa.Column("project_id", sa.String(length=26), nullable=False),
@@ -99,6 +87,29 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("transcription_id"),
     )
     _ = op.create_table(
+        "ai_analyses",
+        sa.Column("analysis_id", sa.String(length=26), nullable=False),
+        sa.Column("project_id", sa.String(length=26), nullable=False),
+        sa.Column("text", sa.Text(), nullable=False),
+        sa.Column("span", sa.Text(), nullable=True),
+        sa.Column("transcript_context_start", sa.String(length=26), nullable=False),
+        sa.Column("transcript_context_end", sa.String(length=26), nullable=False),
+        sa.Column("summary", sa.Text(), nullable=False),
+        sa.ForeignKeyConstraint(
+            ["project_id"],
+            ["project.project_id"],
+        ),
+        sa.ForeignKeyConstraint(
+            ["transcript_context_start"],
+            ["transcriptions.transcription_id"],
+        ),
+        sa.ForeignKeyConstraint(
+            ["transcript_context_end"],
+            ["transcriptions.transcription_id"],
+        ),
+        sa.PrimaryKeyConstraint("analysis_id"),
+    )
+    _ = op.create_table(
         "dismissed_ai_analyses",
         sa.Column("dismissed_analysis_id", sa.String(length=26), nullable=False),
         sa.Column("analysis_id", sa.String(length=26), nullable=False),
@@ -118,6 +129,140 @@ def upgrade() -> None:
             ["users.user_id"],
         ),
         sa.PrimaryKeyConstraint("dismissed_analysis_id"),
+    )
+
+    # ==========================
+    # --- FTS5 (SQLite only) ---
+    # ==========================
+
+    bind = op.get_bind()
+    if bind.dialect.name != "sqlite":
+        print("Can't do FTS5 setup on non-SQLite database.")
+        exit(1)
+
+    # Transcriptions FTS
+    op.execute(
+        """
+        CREATE VIRTUAL TABLE IF NOT EXISTS transcriptions_fts
+        USING fts5(
+            transcription_id UNINDEXED,
+            project_id UNINDEXED,
+            user_id UNINDEXED,
+            text_output,
+            content=''
+        );
+        """
+    )
+
+    # Backfill (safe even in "initial" migration; table likely empty)
+    op.execute(
+        """
+        INSERT INTO transcriptions_fts(rowid, transcription_id, project_id, user_id, text_output)
+        SELECT
+            rowid,
+            transcription_id,
+            project_id,
+            user_id,
+            COALESCE(text_output, '')
+        FROM transcriptions;
+        """
+    )
+
+    op.execute(
+        """
+        CREATE TRIGGER IF NOT EXISTS transcriptions_fts_ai
+        AFTER INSERT ON transcriptions
+        BEGIN
+            INSERT INTO transcriptions_fts(rowid, transcription_id, project_id, user_id, text_output)
+            VALUES (new.rowid, new.transcription_id, new.project_id, new.user_id, COALESCE(new.text_output, ''));
+        END;
+        """
+    )
+
+    op.execute(
+        """
+        CREATE TRIGGER IF NOT EXISTS transcriptions_fts_ad
+        AFTER DELETE ON transcriptions
+        BEGIN
+            INSERT INTO transcriptions_fts(transcriptions_fts, rowid, transcription_id, project_id, user_id, text_output)
+            VALUES ('delete', old.rowid, old.transcription_id, old.project_id, old.user_id, COALESCE(old.text_output, ''));
+        END;
+        """
+    )
+
+    op.execute(
+        """
+        CREATE TRIGGER IF NOT EXISTS transcriptions_fts_au
+        AFTER UPDATE OF transcription_id, project_id, user_id, text_output ON transcriptions
+        BEGIN
+            INSERT INTO transcriptions_fts(transcriptions_fts, rowid, transcription_id, project_id, user_id, text_output)
+            VALUES ('delete', old.rowid, old.transcription_id, old.project_id, old.user_id, COALESCE(old.text_output, ''));
+
+            INSERT INTO transcriptions_fts(rowid, transcription_id, project_id, user_id, text_output)
+            VALUES (new.rowid, new.transcription_id, new.project_id, new.user_id, COALESCE(new.text_output, ''));
+        END;
+        """
+    )
+
+    # AI analyses FTS
+    op.execute(
+        """
+        CREATE VIRTUAL TABLE IF NOT EXISTS ai_analyses_fts
+        USING fts5(
+            analysis_id UNINDEXED,
+            project_id UNINDEXED,
+            text,
+            content=''
+        );
+        """
+    )
+
+    op.execute(
+        """
+        INSERT INTO ai_analyses_fts(rowid, analysis_id, project_id, text)
+        SELECT
+            rowid,
+            analysis_id,
+            project_id,
+            COALESCE(text, '')
+        FROM ai_analyses;
+        """
+    )
+
+    op.execute(
+        """
+        CREATE TRIGGER IF NOT EXISTS ai_analyses_fts_ai
+        AFTER INSERT ON ai_analyses
+        BEGIN
+            INSERT INTO ai_analyses_fts(rowid, analysis_id, project_id, text)
+            VALUES (new.rowid, new.analysis_id, new.project_id, COALESCE(new.text, ''));
+        END;
+        """
+    )
+
+    op.execute(
+        """
+        CREATE TRIGGER IF NOT EXISTS ai_analyses_fts_ad
+        AFTER DELETE ON ai_analyses
+        BEGIN
+            INSERT INTO ai_analyses_fts(ai_analyses_fts, rowid, analysis_id, project_id, text)
+            VALUES ('delete', old.rowid, old.analysis_id, old.project_id, COALESCE(old.text, ''));
+        END;
+        """
+    )
+
+    op.execute(
+        """
+        CREATE TRIGGER IF NOT EXISTS ai_analyses_fts_au
+        AFTER UPDATE OF analysis_id, project_id, text ON ai_analyses
+        BEGIN
+            INSERT INTO ai_analyses_fts(ai_analyses_fts, rowid, analysis_id, project_id, text)
+            VALUES ('delete', old.rowid, old.analysis_id, old.project_id, COALESCE(old.text, ''));
+
+            INSERT INTO ai_analyses_fts(rowid, analysis_id, project_id, text)
+            VALUES (new.rowid, new.analysis_id, new.project_id, COALESCE(new.text, ''));
+        END;
+        """
     )
 
 

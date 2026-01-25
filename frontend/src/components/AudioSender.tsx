@@ -78,7 +78,7 @@ function InsightsPanel({
         <Paper shadow="md" radius="lg" p="md" withBorder>
             <Group gap="xs" align="center" mb="sm">
                 <IconBulb size={18} />
-                <Title order={5}>Insights</Title>
+                <Title order={5}>Questions</Title>
             </Group>
 
             <Tabs defaultValue="active">
@@ -91,7 +91,7 @@ function InsightsPanel({
                     <Stack gap="xs">
                         {activeInsights.length === 0 ? (
                             <Text c="dimmed" size="sm">
-                                No active insights yet — they'll show up here in
+                                No active questions yet. They'll show up here in
                                 real time.
                             </Text>
                         ) : (
@@ -108,7 +108,7 @@ function InsightsPanel({
                     <Stack gap="xs">
                         {dismissedInsights.length === 0 ? (
                             <Text c="dimmed" size="sm">
-                                No dismissed insights.
+                                No dismissed questions.
                             </Text>
                         ) : (
                             dismissedInsights

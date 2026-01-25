@@ -116,17 +116,10 @@ To run the LLM eval tests, in the `backend/` dir run:
 uv run deepeval test run -m "llm"  .\src\interview_helper\ai_analysis\eval
 ```
 
-## Features
+### Create Alembic Migration
 
-- **Real-time Audio Processing:** WebRTC-based audio capture and streaming
-- **Speech-to-Text:** Vosk-powered transcription
-- **Structured Data:** Pydantic models for consistent data handling
-- **Secure Communication:** HTTPS/WSS with self-signed certificates
-- **Development Tools:** Hot reload, TypeScript support, modern tooling
+To autogenerate a migration with alembic, in the `backend/` dir run:
 
-## Development Notes
-
-- The system generates timestamped audio recordings and transcriptions
-- SSL certificates are required for WebRTC functionality
-- Both frontend and backend support hot reload during development
-- Transcriptions are saved in both JSON and text formats for analysis
+```
+uv run alembic revision --autogenerate -m "<message>"
+```

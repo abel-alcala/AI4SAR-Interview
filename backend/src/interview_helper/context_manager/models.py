@@ -65,6 +65,15 @@ class AIAnalysis(Base):
 
     span: Mapped[str] = mapped_column(sa.Text, nullable=True)
 
+    transcript_context_start: Mapped[str] = mapped_column(
+        sa.String(26), ForeignKey("transcriptions.transcription_id"), nullable=False
+    )
+    transcript_context_end: Mapped[str] = mapped_column(
+        sa.String(26), ForeignKey("transcriptions.transcription_id"), nullable=False
+    )
+
+    summary: Mapped[str] = mapped_column(sa.Text, nullable=False)
+
 
 class DismissedAIAnalysis(Base):
     __tablename__: str = "dismissed_ai_analyses"

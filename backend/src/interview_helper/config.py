@@ -50,7 +50,7 @@ class Settings(BaseSettings):
     bytes_per_sample: int = 2
 
     # AI Processing
-    process_transcript_every_secs: float = 60.0 * 2
+    process_transcript_every_secs: float = 60.0 * 2  # 2 minutes
     process_transcript_every_word_count: int = 100
 
     azure_api_endpoint: str = Field(alias="OPENAI_API_ENDPOINT")
@@ -70,6 +70,10 @@ class Settings(BaseSettings):
     # STT
     azure_speech_key: SecretStr | None = Field(alias="AZURE_SPEECH_KEY", default=None)
     azure_speech_region: str | None = Field(alias="AZURE_SPEECH_REGION", default=None)
+
+    LANGFUSE_SECRET_KEY: SecretStr | None = Field(alias="LANGFUSE_SECRET_KEY")
+    LANGFUSE_PUBLIC_KEY: str | None = Field(alias="LANGFUSE_PUBLIC_KEY")
+    LANGFUSE_BASE_URL: str | None = Field(alias="LANGFUSE_BASE_URL")
 
     @model_validator(mode="after")
     def check_azure_fields_together(self):
