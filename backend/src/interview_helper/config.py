@@ -50,7 +50,7 @@ class Settings(BaseSettings):
     bytes_per_sample: int = 2
 
     # AI Processing
-    process_transcript_every_secs: float = 20.0
+    process_transcript_every_secs: float = 60.0 * 2  # 2 minutes
     process_transcript_every_word_count: int = 100
 
     azure_api_endpoint: str = Field(alias="OPENAI_API_ENDPOINT")
