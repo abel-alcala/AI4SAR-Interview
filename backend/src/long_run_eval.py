@@ -15,12 +15,14 @@ from typing import Any
 import anyio
 from tqdm import tqdm
 from ulid import ULID
+import sqlalchemy as sa
 
 from interview_helper.ai_analysis.ai_analysis import SimpleAnalyzer
 from interview_helper.ai_analysis.eval.metrics import get_metric_list
 from interview_helper.config import Settings
 from interview_helper.context_manager.database import (
     PersistentDatabase,
+    add_ai_analysis,
     add_transcription,
 )
 from interview_helper.context_manager.types import AIJob, ProjectId, SessionId, UserId
@@ -110,12 +112,19 @@ model = AzureOpenAIModel(
 
 metrics = get_metric_list(model)
 
+time_id = int(time.time())
+
 
 async def run_analysis(
     chunks: list[list[str]], settings: Settings, metric_list: list[BaseMetric]
 ) -> list[EvaluationResult]:
     # Setup in-memory database and details
-    db = PersistentDatabase.new_in_memory()
+    engine = sa.create_engine(
+        f"sqlite+pysqlite:///long_run_test-{time_id}.sqlite3", echo=False
+    )
+    db = PersistentDatabase(engine)
+    db._run_migrations_for_testing()  # pyright: ignore[reportPrivateUsage]
+
     user = UserId(ULID())
     session = SessionId(ULID())
     project = ProjectId(ULID())
@@ -141,8 +150,20 @@ async def run_analysis(
         for line in chunk:
             _ = add_transcription(db, user, session, project, line)
 
-        follow_up_questions = await ai_analyzer.analyze(AIJob(project), [])
-        question_text = "\n".join([q.question for q in follow_up_questions.questions])
+        analysis_results = await ai_analyzer.analyze(AIJob(project), [])
+        question_text = "\n".join([q.question for q in analysis_results.questions])
+
+        # Add to db
+        for result in analysis_results.questions:
+            _ = add_ai_analysis(
+                db,
+                project_id=project,
+                text=result.question,
+                span=result.grounding_span,
+                transcript_context_start=analysis_results.transcript_context_start,
+                transcript_context_end=analysis_results.transcript_context_end,
+                summary=analysis_results.summary,
+            )
 
         test_case = LLMTestCase(
             input="\n".join(chunk),
@@ -202,9 +223,7 @@ fieldnames = sorted(
     ),
 )
 
-with open(
-    f"long_result-{int(time.time())}.csv", "w", newline="", encoding="utf-8"
-) as f:
+with open(f"long_result-{time_id}.csv", "w", newline="", encoding="utf-8") as f:
     writer = csv.DictWriter(f, fieldnames=fieldnames)
     writer.writeheader()
     writer.writerows(rows)
