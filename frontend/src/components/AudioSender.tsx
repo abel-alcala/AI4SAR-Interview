@@ -136,7 +136,7 @@ export function AudioSender() {
     const [connectionState, setConnectionState] =
         useState<validConnectionStates>("disconnected");
 
-    const [transcript, setTranscript] = useState("");
+    const [transcript, setTranscript] = useState<string[]>([]);
 
     const [insights, setInsights] = useState<AnalysisRow[]>([]);
     const [projectName, setProjectName] = useState<string | null>(null);
@@ -185,14 +185,7 @@ export function AudioSender() {
         [ws],
     );
 
-    // Scroll to bottom when transcript changes
     const viewportRef = useRef<HTMLDivElement | null>(null);
-    useEffect(() => {
-        const el = viewportRef.current;
-        if (el) {
-            el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-        }
-    }, [transcript]);
 
     // Stable connection state handler
     const handleConnectionChange = useCallback(
@@ -239,10 +232,10 @@ export function AudioSender() {
     // Register transcript handler
     useEffect(() => {
         const handleTranscription = (message: TranscriptionMessage) => {
-            setTranscript(
-                (prevState: string) =>
-                    (prevState ? prevState + " " : "") + message.text,
-            );
+            setTranscript((prevState: string[]) => [
+                message.text,
+                ...prevState,
+            ]);
         };
 
         ws.registerMessageHandler("transcription", handleTranscription);
@@ -287,7 +280,8 @@ export function AudioSender() {
     // Register Catchup Message
     useEffect(() => {
         const handleCatchup = (message: CatchupMessage) => {
-            setTranscript(message.transcript);
+            // Reverse transcript array so most recent (last) items appear at the top
+            setTranscript([...message.transcript].reverse());
             setInsights(message.insights);
         };
 
@@ -375,137 +369,340 @@ export function AudioSender() {
                 style={{
                     flex: 1,
                     display: "flex",
-                    flexDirection: isMobile ? "column" : "row",
+                    flexDirection: "row",
                     gap: "var(--mantine-spacing-md)",
                     padding: "var(--mantine-spacing-md)",
                     boxSizing: "border-box",
                     overflow: "hidden",
                 }}
             >
-                {/* Mobile: Insights at the top; Desktop: at the right */}
-                {isMobile && (
-                    <Box style={{ flex: "0 0 auto" }}>
-                        <InsightsPanel
-                            insights={insights}
-                            onDismiss={handleDismissInsight}
-                        />
-                    </Box>
-                )}
-
-                {/* Transcript area fills the rest */}
-                <Box
-                    style={{
-                        position: "relative",
-                        flex: 1,
-                        minWidth: 0,
-                        overflow: "hidden",
-                    }}
-                >
-                    <Paper
-                        withBorder
-                        shadow="sm"
-                        radius="lg"
-                        style={{ height: "100%" }}
+                {/* Mobile: Tabs for Transcript and Analysis */}
+                {isMobile ? (
+                    <Box
+                        style={{
+                            position: "relative",
+                            flex: 1,
+                            minWidth: 0,
+                            overflow: "hidden",
+                        }}
                     >
-                        <Stack gap="xs" style={{ height: "100%" }}>
-                            <Group justify="space-between" p="md" pb={0}>
-                                <Group gap="xs">
-                                    <Title order={4}>
-                                        {projectName != null
-                                            ? `${projectName} - Transcript`
-                                            : "Transcript"}
-                                    </Title>
-                                    {isConnected && (
-                                        <Badge color="red">Live</Badge>
-                                    )}
-                                </Group>
-                                <Text size="sm" c={statusColor}>
-                                    {statusText}
-                                </Text>
-                            </Group>
-
-                            <ScrollArea
-                                type="always"
-                                style={{ flex: 1 }}
-                                viewportRef={viewportRef}
-                                offsetScrollbars
+                        <Paper
+                            withBorder
+                            shadow="sm"
+                            radius="lg"
+                            style={{
+                                height: "100%",
+                                display: "flex",
+                                flexDirection: "column",
+                            }}
+                        >
+                            <Tabs
+                                defaultValue="transcript"
+                                style={{
+                                    height: "100%",
+                                    display: "flex",
+                                    flexDirection: "column",
+                                }}
                             >
-                                <Box p="md" pt={0}>
-                                    {transcript ? (
-                                        <Text
+                                <Tabs.List>
+                                    <Tabs.Tab value="transcript">
+                                        <Group gap="xs">
+                                            <Text>Transcript</Text>
+                                            {isConnected && (
+                                                <Badge color="red" size="sm">
+                                                    Live
+                                                </Badge>
+                                            )}
+                                        </Group>
+                                    </Tabs.Tab>
+                                    <Tabs.Tab value="analysis">
+                                        Questions
+                                    </Tabs.Tab>
+                                </Tabs.List>
+
+                                <Tabs.Panel
+                                    value="transcript"
+                                    style={{
+                                        flex: 1,
+                                        display: "flex",
+                                        flexDirection: "column",
+                                        overflow: "hidden",
+                                    }}
+                                >
+                                    <Stack gap="xs" style={{ height: "100%" }}>
+                                        <Group
+                                            justify="space-between"
+                                            p="md"
+                                            pb={0}
+                                        >
+                                            <Title order={5}>
+                                                {projectName != null
+                                                    ? projectName
+                                                    : "Interview"}
+                                            </Title>
+                                            <Text size="sm" c={statusColor}>
+                                                {statusText}
+                                            </Text>
+                                        </Group>
+
+                                        <ScrollArea
+                                            type="always"
+                                            style={{ flex: 1 }}
+                                            viewportRef={viewportRef}
+                                            offsetScrollbars
+                                        >
+                                            <Box p="md" pt={0}>
+                                                {transcript.length > 0 ? (
+                                                    <Stack gap="sm">
+                                                        {transcript.map(
+                                                            (line, index) => (
+                                                                <Text
+                                                                    key={index}
+                                                                    style={{
+                                                                        whiteSpace:
+                                                                            "pre-wrap",
+                                                                        lineHeight: 1.6,
+                                                                    }}
+                                                                >
+                                                                    {line}
+                                                                </Text>
+                                                            ),
+                                                        )}
+                                                    </Stack>
+                                                ) : (
+                                                    <Text
+                                                        c="dimmed"
+                                                        ta="center"
+                                                        py="xl"
+                                                    >
+                                                        Your transcript will
+                                                        appear here.
+                                                    </Text>
+                                                )}
+                                            </Box>
+                                        </ScrollArea>
+                                    </Stack>
+                                </Tabs.Panel>
+
+                                <Tabs.Panel
+                                    value="analysis"
+                                    style={{
+                                        flex: 1,
+                                        display: "flex",
+                                        flexDirection: "column",
+                                        overflow: "hidden",
+                                    }}
+                                    pt="md"
+                                >
+                                    <Box
+                                        p="md"
+                                        style={{ flex: 1, overflow: "auto" }}
+                                    >
+                                        <InsightsPanel
+                                            insights={insights}
+                                            onDismiss={handleDismissInsight}
+                                        />
+                                    </Box>
+                                </Tabs.Panel>
+                            </Tabs>
+                        </Paper>
+
+                        {/* Bottom-center recording control (floating) - Mobile */}
+                        <Affix position={{ bottom: 24, left: 0, right: 0 }}>
+                            <Center>
+                                <Paper
+                                    shadow="xl"
+                                    radius="xl"
+                                    p="sm"
+                                    withBorder
+                                >
+                                    <Group gap="md" align="center">
+                                        <Button
+                                            variant={buttonVariant}
+                                            color={buttonColor}
+                                            leftSection={
+                                                isConnecting ? (
+                                                    <Loader
+                                                        size="sm"
+                                                        color="white"
+                                                    />
+                                                ) : (
+                                                    <IconMicrophone size={18} />
+                                                )
+                                            }
+                                            size="lg"
+                                            radius="xl"
+                                            loading={isConnecting}
+                                            disabled={
+                                                ws.connectionStatus !==
+                                                    "connected" && !isConnecting
+                                            }
+                                            onClick={() => {
+                                                if (
+                                                    connectionState ===
+                                                    "disconnected"
+                                                ) {
+                                                    startSendingAudio();
+                                                } else if (
+                                                    connectionState ===
+                                                    "connected"
+                                                ) {
+                                                    stopSendingAudio();
+                                                }
+                                            }}
                                             style={{
-                                                whiteSpace: "pre-wrap",
-                                                lineHeight: 1.6,
+                                                minWidth: 200,
                                             }}
                                         >
-                                            {transcript}
-                                        </Text>
-                                    ) : (
-                                        <Text c="dimmed" ta="center" py="xl">
-                                            Your transcript will appear here.
-                                        </Text>
-                                    )}
-                                </Box>
-                            </ScrollArea>
-                        </Stack>
-                    </Paper>
-
-                    {/* Bottom-center recording control (floating) */}
-                    <Affix position={{ bottom: 24, left: 0, right: 0 }}>
-                        <Center>
-                            <Paper shadow="xl" radius="xl" p="sm" withBorder>
-                                <Group gap="md" align="center">
-                                    <Button
-                                        variant={buttonVariant}
-                                        color={buttonColor}
-                                        leftSection={
-                                            isConnecting ? (
-                                                <Loader
-                                                    size="sm"
-                                                    color="white"
-                                                />
-                                            ) : (
-                                                <IconMicrophone size={18} />
-                                            )
-                                        }
-                                        size={isMobile ? "lg" : "xl"}
-                                        radius="xl"
-                                        loading={isConnecting}
-                                        disabled={
-                                            ws.connectionStatus !==
-                                                "connected" && !isConnecting
-                                        }
-                                        onClick={() => {
-                                            if (
-                                                connectionState ===
-                                                "disconnected"
-                                            ) {
-                                                startSendingAudio();
-                                            } else if (
-                                                connectionState === "connected"
-                                            ) {
-                                                stopSendingAudio();
-                                            }
-                                        }}
-                                        style={{
-                                            minWidth: isMobile ? 200 : 260,
-                                        }}
-                                    >
-                                        {buttonText}
-                                    </Button>
-                                </Group>
-                            </Paper>
-                        </Center>
-                    </Affix>
-                </Box>
-
-                {!isMobile && (
-                    <Box style={{ flex: "0 0 340px" }}>
-                        <InsightsPanel
-                            insights={insights}
-                            onDismiss={handleDismissInsight}
-                        />
+                                            {buttonText}
+                                        </Button>
+                                    </Group>
+                                </Paper>
+                            </Center>
+                        </Affix>
                     </Box>
+                ) : (
+                    <>
+                        {/* Desktop: Transcript area fills the rest */}
+                        <Box
+                            style={{
+                                position: "relative",
+                                flex: 1,
+                                minWidth: 0,
+                                overflow: "hidden",
+                            }}
+                        >
+                            <Paper
+                                withBorder
+                                shadow="sm"
+                                radius="lg"
+                                style={{ height: "100%" }}
+                            >
+                                <Stack gap="xs" style={{ height: "100%" }}>
+                                    <Group
+                                        justify="space-between"
+                                        p="md"
+                                        pb={0}
+                                    >
+                                        <Group gap="xs">
+                                            <Title order={4}>
+                                                {projectName != null
+                                                    ? `${projectName} - Transcript`
+                                                    : "Transcript"}
+                                            </Title>
+                                            {isConnected && (
+                                                <Badge color="red">Live</Badge>
+                                            )}
+                                        </Group>
+                                        <Text size="sm" c={statusColor}>
+                                            {statusText}
+                                        </Text>
+                                    </Group>
+
+                                    <ScrollArea
+                                        type="always"
+                                        style={{ flex: 1 }}
+                                        viewportRef={viewportRef}
+                                        offsetScrollbars
+                                    >
+                                        <Box p="md" pt={0}>
+                                            {transcript.length > 0 ? (
+                                                <Stack gap="sm">
+                                                    {transcript.map(
+                                                        (line, index) => (
+                                                            <Text
+                                                                key={index}
+                                                                style={{
+                                                                    whiteSpace:
+                                                                        "pre-wrap",
+                                                                    lineHeight: 1.6,
+                                                                }}
+                                                            >
+                                                                {line}
+                                                            </Text>
+                                                        ),
+                                                    )}
+                                                </Stack>
+                                            ) : (
+                                                <Text
+                                                    c="dimmed"
+                                                    ta="center"
+                                                    py="xl"
+                                                >
+                                                    Your transcript will appear
+                                                    here.
+                                                </Text>
+                                            )}
+                                        </Box>
+                                    </ScrollArea>
+                                </Stack>
+                            </Paper>
+
+                            {/* Bottom-center recording control (floating) - Desktop */}
+                            <Affix position={{ bottom: 24, left: 0, right: 0 }}>
+                                <Center>
+                                    <Paper
+                                        shadow="xl"
+                                        radius="xl"
+                                        p="sm"
+                                        withBorder
+                                    >
+                                        <Group gap="md" align="center">
+                                            <Button
+                                                variant={buttonVariant}
+                                                color={buttonColor}
+                                                leftSection={
+                                                    isConnecting ? (
+                                                        <Loader
+                                                            size="sm"
+                                                            color="white"
+                                                        />
+                                                    ) : (
+                                                        <IconMicrophone
+                                                            size={18}
+                                                        />
+                                                    )
+                                                }
+                                                size="xl"
+                                                radius="xl"
+                                                loading={isConnecting}
+                                                disabled={
+                                                    ws.connectionStatus !==
+                                                        "connected" &&
+                                                    !isConnecting
+                                                }
+                                                onClick={() => {
+                                                    if (
+                                                        connectionState ===
+                                                        "disconnected"
+                                                    ) {
+                                                        startSendingAudio();
+                                                    } else if (
+                                                        connectionState ===
+                                                        "connected"
+                                                    ) {
+                                                        stopSendingAudio();
+                                                    }
+                                                }}
+                                                style={{
+                                                    minWidth: 260,
+                                                }}
+                                            >
+                                                {buttonText}
+                                            </Button>
+                                        </Group>
+                                    </Paper>
+                                </Center>
+                            </Affix>
+                        </Box>
+
+                        <Box style={{ flex: "0 0 340px" }}>
+                            <InsightsPanel
+                                insights={insights}
+                                onDismiss={handleDismissInsight}
+                            />
+                        </Box>
+                    </>
                 )}
             </Box>
         </Box>

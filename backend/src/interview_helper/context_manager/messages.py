@@ -47,7 +47,7 @@ class PingMessage(BaseModel):
 class CatchupMessage(BaseModel):
     type: Literal["catchup"] = "catchup"
     timestamp: datetime = Field(default_factory=datetime.now)
-    transcript: str
+    transcript: list[str]
     insights: list[AnalysisRow]
 
 
