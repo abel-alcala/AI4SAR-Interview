@@ -37,6 +37,7 @@ class Transcription(Base):
     user_id: Mapped[str] = mapped_column(
         sa.String(26), ForeignKey("users.user_id"), nullable=False
     )
+    session_id: Mapped[str] = mapped_column(sa.String(26), nullable=False)
 
     text_output: Mapped[str] = mapped_column(sa.Text, nullable=True)
     speaker: Mapped[str] = mapped_column(sa.String(100), nullable=True)

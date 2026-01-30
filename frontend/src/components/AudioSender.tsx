@@ -245,7 +245,7 @@ export function AudioSender() {
                 if (prevState.length > 0 && prevState[0].speaker === speaker) {
                     const updatedSection = {
                         ...prevState[0],
-                        text: prevState[0].text + text,
+                        text: prevState[0].text + " " + text.trim(),
                     };
                     return [updatedSection, ...prevState.slice(1)];
                 }
@@ -302,14 +302,14 @@ export function AudioSender() {
 
             for (const chunk of message.transcript) {
                 const speaker = chunk.speaker;
-                const text = chunk.text;
+                const text = chunk.text.trim();
 
                 // If the last section has the same speaker, append to it
                 if (
                     sections.length > 0 &&
                     sections[sections.length - 1].speaker === speaker
                 ) {
-                    sections[sections.length - 1].text += text;
+                    sections[sections.length - 1].text += " " + text;
                 } else {
                     // Create a new section for this speaker
                     sections.push({ speaker, text });

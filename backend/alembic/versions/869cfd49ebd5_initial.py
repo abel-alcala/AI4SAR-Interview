@@ -62,8 +62,10 @@ def upgrade() -> None:
         "transcriptions",
         sa.Column("transcription_id", sa.String(length=26), nullable=False),
         sa.Column("project_id", sa.String(length=26), nullable=False),
+        sa.Column("session_id", sa.String(length=26), nullable=False),
         sa.Column("user_id", sa.String(length=26), nullable=False),
         sa.Column("text_output", sa.Text(), nullable=True),
+        sa.Column("speaker", sa.String(length=100), nullable=True),
         sa.Column(
             "created_at",
             sa.DateTime(),

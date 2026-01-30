@@ -553,3 +553,45 @@ def get_most_recent_summary(
             return None
 
         return result[0]  # pyright: ignore[reportAny]
+
+
+def get_session_sequence_number(
+    db: PersistentDatabase, project_id: ProjectId, session_id: SessionId
+) -> int:
+    """
+    Gets the session sequence (e.g., 1 for the first, 2 for the second) for a given project and session ID
+    """
+
+    with db.begin() as conn:
+        result = conn.execute(  # pyright: ignore[reportAny]
+            sa.text("""
+            WITH sessions AS (
+                SELECT
+                    session_id,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY project_id
+                        ORDER BY created_at
+                    ) AS session_number
+                FROM transcriptions
+                WHERE project_id = :project_id
+                GROUP BY session_id
+            ),
+            current_session AS (
+                SELECT session_number
+                FROM sessions
+                WHERE session_id = :session_id
+            ),
+            max_session AS (
+                SELECT COALESCE(MAX(session_number), 0) AS max_session_number
+                FROM sessions
+            )
+            SELECT
+                COALESCE(
+                    (SELECT session_number FROM current_session),
+                    (SELECT max_session_number + 1 FROM max_session)
+                ) AS session_number;
+            """),
+            {"project_id": str(project_id), "session_id": str(session_id)},
+        ).scalar_one()
+
+        return result  # pyright: ignore[reportAny]
