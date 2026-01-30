@@ -476,13 +476,26 @@ def add_ai_analysis(
     return AnalysisId.from_str(analysis_id)
 
 
+def preprocess_fts5_text(searches: list[str]) -> str:
+    """
+    Preprocesses text for FTS5 insertion by removing punctuation
+    """
+    return " ".join(
+        "".join(char for char in phrase if char.isalnum() or char.isspace())
+        for phrase in searches
+    )
+
+
 def full_text_search_transcriptions(
-    db: PersistentDatabase, project_id: ProjectId, fts5_query: str
+    db: PersistentDatabase, project_id: ProjectId, fts5_query_phrases: list[str]
 ) -> list[str]:
     """
     Performs a full-text search on transcriptions, returning a list of tuples
     (transcription_id, text_output) that match the query.
     """
+
+    query = preprocess_fts5_text(fts5_query_phrases)
+
     with db.begin() as conn:
         rows = conn.execute(
             sa.text(
@@ -500,19 +513,27 @@ def full_text_search_transcriptions(
 
                 """
             ),
-            {"query": fts5_query, "project_id": str(project_id)},
+            {"query": query, "project_id": str(project_id)},
         ).all()
 
     return [row.text_output for row in rows]  # pyright: ignore[reportAny]
 
 
 def full_text_search_ai_analysis(
-    db: PersistentDatabase, project_id: ProjectId, fts5_query: str
+    db: PersistentDatabase, project_id: ProjectId, fts5_query_phrases: list[str]
 ) -> list[str]:
     """
     Performs a full-text search on AI analyses, returning a list of tuples
     (analysis_id, text) that match the query.
+
+    FTS5 query:
+    1. Search for phrases in fts5_query_phrases (combined with OR)
+    2. Do not use any punctuation in the search
     """
+
+    # remove punctuation
+    query = preprocess_fts5_text(fts5_query_phrases)
+
     with db.begin() as conn:
         rows = conn.execute(
             sa.text(
@@ -529,7 +550,7 @@ def full_text_search_ai_analysis(
                 ORDER BY rank ASC;
                 """
             ),
-            {"query": fts5_query, "project_id": str(project_id)},
+            {"query": query, "project_id": str(project_id)},
         ).all()
 
     return [row.text for row in rows]  # pyright: ignore[reportAny]
