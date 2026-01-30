@@ -54,7 +54,7 @@ async def test_question_quality(model: AzureOpenAIModel):
     ][:10]  # Get first 10 chunks only (100 lines)
 
     for chunk in transcript_chunks:
-        _ = add_transcription(db, user, session, project, chunk)
+        _ = add_transcription(db, user, session, project, chunk, None)
 
     ai_analyzer = SimpleAnalyzer(config, db)
     follow_up_questions = await ai_analyzer.analyze(AIJob(project), [])

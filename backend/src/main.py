@@ -13,6 +13,7 @@ from interview_helper.context_manager.messages import (
     PingMessage,
     CatchupMessage,
     ProjectMetadataMessage,
+    TranscriptChunkToSend,
 )
 from starlette.responses import RedirectResponse
 from interview_helper.security.http import (
@@ -332,7 +333,11 @@ async def websocket_endpoint(
                     )
                     # Send each transcript entry as a separate string for bottom-to-top display
                     transcript_list = [
-                        transcript["text_output"] for transcript in transcripts
+                        TranscriptChunkToSend(
+                            text=transcript["text_output"],
+                            speaker=transcript["speaker"],
+                        )
+                        for transcript in transcripts
                     ]
 
                     ai_analyses = get_all_ai_analyses(

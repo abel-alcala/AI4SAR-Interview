@@ -148,7 +148,7 @@ async def run_analysis(
         chunks, f"Analyzing {settings.process_transcript_every_secs}s chunks..."
     ):
         for line in chunk:
-            _ = add_transcription(db, user, session, project, line)
+            _ = add_transcription(db, user, session, project, line, None)
 
         analysis_results = await ai_analyzer.analyze(AIJob(project), [])
         question_text = "\n".join([q.question for q in analysis_results.questions])

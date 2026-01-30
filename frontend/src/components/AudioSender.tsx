@@ -124,6 +124,11 @@ function InsightsPanel({
     );
 }
 
+interface TranscriptSection {
+    speaker: string | null;
+    text: string;
+}
+
 export function AudioSender() {
     type validConnectionStates =
         | "disconnected"
@@ -136,7 +141,7 @@ export function AudioSender() {
     const [connectionState, setConnectionState] =
         useState<validConnectionStates>("disconnected");
 
-    const [transcript, setTranscript] = useState<string[]>([]);
+    const [transcript, setTranscript] = useState<TranscriptSection[]>([]);
 
     const [insights, setInsights] = useState<AnalysisRow[]>([]);
     const [projectName, setProjectName] = useState<string | null>(null);
@@ -232,10 +237,22 @@ export function AudioSender() {
     // Register transcript handler
     useEffect(() => {
         const handleTranscription = (message: TranscriptionMessage) => {
-            setTranscript((prevState: string[]) => [
-                message.text,
-                ...prevState,
-            ]);
+            setTranscript((prevState: TranscriptSection[]) => {
+                const speaker = message.chunk.speaker;
+                const text = message.chunk.text;
+
+                // If the most recent section has the same speaker, append to it
+                if (prevState.length > 0 && prevState[0].speaker === speaker) {
+                    const updatedSection = {
+                        ...prevState[0],
+                        text: prevState[0].text + text,
+                    };
+                    return [updatedSection, ...prevState.slice(1)];
+                }
+
+                // Otherwise, create a new section for this speaker
+                return [{ speaker, text }, ...prevState];
+            });
         };
 
         ws.registerMessageHandler("transcription", handleTranscription);
@@ -280,8 +297,27 @@ export function AudioSender() {
     // Register Catchup Message
     useEffect(() => {
         const handleCatchup = (message: CatchupMessage) => {
-            // Reverse transcript array so most recent (last) items appear at the top
-            setTranscript([...message.transcript].reverse());
+            // Process transcript chunks into speaker sections
+            const sections: TranscriptSection[] = [];
+
+            for (const chunk of message.transcript) {
+                const speaker = chunk.speaker;
+                const text = chunk.text;
+
+                // If the last section has the same speaker, append to it
+                if (
+                    sections.length > 0 &&
+                    sections[sections.length - 1].speaker === speaker
+                ) {
+                    sections[sections.length - 1].text += text;
+                } else {
+                    // Create a new section for this speaker
+                    sections.push({ speaker, text });
+                }
+            }
+
+            // Reverse so most recent speaker is at the top
+            setTranscript(sections.reverse());
             setInsights(message.insights);
         };
 
@@ -453,19 +489,36 @@ export function AudioSender() {
                                         >
                                             <Box p="md" pt={0}>
                                                 {transcript.length > 0 ? (
-                                                    <Stack gap="sm">
+                                                    <Stack gap="md">
                                                         {transcript.map(
-                                                            (line, index) => (
-                                                                <Text
+                                                            (
+                                                                section,
+                                                                index,
+                                                            ) => (
+                                                                <Box
                                                                     key={index}
-                                                                    style={{
-                                                                        whiteSpace:
-                                                                            "pre-wrap",
-                                                                        lineHeight: 1.6,
-                                                                    }}
                                                                 >
-                                                                    {line}
-                                                                </Text>
+                                                                    <Title
+                                                                        order={
+                                                                            6
+                                                                        }
+                                                                        mb="xs"
+                                                                    >
+                                                                        {section.speaker ??
+                                                                            "Unknown Speaker"}
+                                                                    </Title>
+                                                                    <Text
+                                                                        style={{
+                                                                            whiteSpace:
+                                                                                "pre-wrap",
+                                                                            lineHeight: 1.6,
+                                                                        }}
+                                                                    >
+                                                                        {
+                                                                            section.text
+                                                                        }
+                                                                    </Text>
+                                                                </Box>
                                                             ),
                                                         )}
                                                     </Stack>
@@ -607,19 +660,29 @@ export function AudioSender() {
                                     >
                                         <Box p="md" pt={0}>
                                             {transcript.length > 0 ? (
-                                                <Stack gap="sm">
+                                                <Stack gap="md">
                                                     {transcript.map(
-                                                        (line, index) => (
-                                                            <Text
-                                                                key={index}
-                                                                style={{
-                                                                    whiteSpace:
-                                                                        "pre-wrap",
-                                                                    lineHeight: 1.6,
-                                                                }}
-                                                            >
-                                                                {line}
-                                                            </Text>
+                                                        (section, index) => (
+                                                            <Box key={index}>
+                                                                <Title
+                                                                    order={6}
+                                                                    mb="xs"
+                                                                >
+                                                                    {section.speaker ??
+                                                                        "Unknown Speaker"}
+                                                                </Title>
+                                                                <Text
+                                                                    style={{
+                                                                        whiteSpace:
+                                                                            "pre-wrap",
+                                                                        lineHeight: 1.6,
+                                                                    }}
+                                                                >
+                                                                    {
+                                                                        section.text
+                                                                    }
+                                                                </Text>
+                                                            </Box>
                                                         ),
                                                     )}
                                                 </Stack>

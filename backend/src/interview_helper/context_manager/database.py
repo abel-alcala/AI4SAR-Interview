@@ -160,6 +160,7 @@ def add_transcription(
     session_id: SessionId,
     project_id: ProjectId,
     text: str,
+    speaker: str | None,
 ) -> str:
     """
     Adds a transcription result, returns the transcription ID
@@ -174,6 +175,7 @@ def add_transcription(
                 "session_id": str(session_id),
                 "project_id": str(project_id),
                 "text_output": text,
+                "speaker": speaker,
             },
         )
 
@@ -183,6 +185,7 @@ def add_transcription(
 class TranscriptChunk(TypedDict):
     transcription_id: TranscriptId
     text_output: str
+    speaker: str | None
 
 
 def get_all_transcripts(
@@ -194,15 +197,21 @@ def get_all_transcripts(
     with db.begin() as conn:
         db_rows = conn.execute(
             sa.select(
-                models.Transcription.text_output, models.Transcription.transcription_id
+                models.Transcription.text_output,
+                models.Transcription.speaker,
+                models.Transcription.transcription_id,
             )
             .where(models.Transcription.project_id == str(project_id))
             .order_by(models.Transcription.created_at.asc())
         ).all()
 
     rows: list[TranscriptChunk] = [
-        {"transcription_id": transcription_id, "text_output": text_output}
-        for text_output, transcription_id in db_rows  # pyright: ignore[reportAny]
+        {
+            "transcription_id": transcription_id,
+            "text_output": text_output,
+            "speaker": speaker,
+        }
+        for text_output, speaker, transcription_id in db_rows  # pyright: ignore[reportAny]
     ]
 
     return rows
@@ -218,6 +227,7 @@ def get_all_transcripts_since_last_analysis(
     sql = sa.text("""
         SELECT
             t.text_output,
+            t.speaker,
             t.transcription_id
         FROM transcriptions t
         WHERE
@@ -247,8 +257,12 @@ def get_all_transcripts_since_last_analysis(
         db_rows = conn.execute(sql, {"project_id": str(project_id)}).all()
 
     rows: list[TranscriptChunk] = [
-        {"transcription_id": TranscriptId(transcription_id), "text_output": text_output}  # pyright: ignore[reportAny]
-        for text_output, transcription_id in db_rows  # pyright: ignore[reportAny]
+        {
+            "transcription_id": TranscriptId(transcription_id),  # pyright: ignore[reportAny]
+            "text_output": text_output,
+            "speaker": speaker,
+        }
+        for text_output, speaker, transcription_id in db_rows  # pyright: ignore[reportAny]
     ]
 
     return rows

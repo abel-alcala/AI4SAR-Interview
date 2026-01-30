@@ -23,7 +23,7 @@ async def vosk_close_transcriber(ctx: SessionContext):
     if rec is not None:
         text = json.loads(rec.FinalResult())["text"]
         if text:
-            await accept_transcript(ctx, text, ws)
+            await accept_transcript(ctx, text, None, ws)
 
 
 async def vosk_transcribe_audio_consumer(ctx: SessionContext, audio_chunk: AudioChunk):
@@ -53,4 +53,4 @@ async def vosk_transcribe_audio_consumer(ctx: SessionContext, audio_chunk: Audio
             # Finalized segment
             text = json.loads(rec.Result())["text"]
             if text:
-                await accept_transcript(ctx, text, ws)
+                await accept_transcript(ctx, text, None, ws)
