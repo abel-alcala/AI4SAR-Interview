@@ -38,10 +38,8 @@ async def accept_transcript(
         # Decompose session_id
         name = speaker.split("-")[0]
         number = speaker.split("-")[1] if "-" in speaker else ""
-        speaker = f"{speaker}_{letters}"
 
         speaker = f"{name}-{letters}{number}" if number else f"{name}_{letters}"
-
     # Add to DB
     added_transcription_id = TranscriptId.from_str(
         add_transcription(
