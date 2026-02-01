@@ -160,6 +160,7 @@ def add_transcription(
     session_id: SessionId,
     project_id: ProjectId,
     text: str,
+    speaker: str | None,
 ) -> str:
     """
     Adds a transcription result, returns the transcription ID
@@ -174,6 +175,7 @@ def add_transcription(
                 "session_id": str(session_id),
                 "project_id": str(project_id),
                 "text_output": text,
+                "speaker": speaker,
             },
         )
 
@@ -183,6 +185,7 @@ def add_transcription(
 class TranscriptChunk(TypedDict):
     transcription_id: TranscriptId
     text_output: str
+    speaker: str | None
 
 
 def get_all_transcripts(
@@ -194,15 +197,21 @@ def get_all_transcripts(
     with db.begin() as conn:
         db_rows = conn.execute(
             sa.select(
-                models.Transcription.text_output, models.Transcription.transcription_id
+                models.Transcription.text_output,
+                models.Transcription.speaker,
+                models.Transcription.transcription_id,
             )
             .where(models.Transcription.project_id == str(project_id))
             .order_by(models.Transcription.created_at.asc())
         ).all()
 
     rows: list[TranscriptChunk] = [
-        {"transcription_id": transcription_id, "text_output": text_output}
-        for text_output, transcription_id in db_rows  # pyright: ignore[reportAny]
+        {
+            "transcription_id": transcription_id,
+            "text_output": text_output,
+            "speaker": speaker,
+        }
+        for text_output, speaker, transcription_id in db_rows  # pyright: ignore[reportAny]
     ]
 
     return rows
@@ -218,6 +227,7 @@ def get_all_transcripts_since_last_analysis(
     sql = sa.text("""
         SELECT
             t.text_output,
+            t.speaker,
             t.transcription_id
         FROM transcriptions t
         WHERE
@@ -247,8 +257,12 @@ def get_all_transcripts_since_last_analysis(
         db_rows = conn.execute(sql, {"project_id": str(project_id)}).all()
 
     rows: list[TranscriptChunk] = [
-        {"transcription_id": TranscriptId(transcription_id), "text_output": text_output}  # pyright: ignore[reportAny]
-        for text_output, transcription_id in db_rows  # pyright: ignore[reportAny]
+        {
+            "transcription_id": TranscriptId(transcription_id),  # pyright: ignore[reportAny]
+            "text_output": text_output,
+            "speaker": speaker,
+        }
+        for text_output, speaker, transcription_id in db_rows  # pyright: ignore[reportAny]
     ]
 
     return rows
@@ -462,13 +476,30 @@ def add_ai_analysis(
     return AnalysisId.from_str(analysis_id)
 
 
+def preprocess_fts5_text(searches: list[str]) -> str:
+    """
+    Preprocesses text for FTS5 queries by removing punctuation and
+    combining multiple phrases with OR for SQLite FTS5.
+    """
+    cleaned_phrases = [
+        "".join(char for char in phrase if char.isalnum() or char.isspace()).strip()
+        for phrase in searches
+    ]
+    # Filter out any phrases that became empty after cleaning
+    cleaned_phrases = [phrase for phrase in cleaned_phrases if phrase]
+    return " OR ".join(cleaned_phrases)
+
+
 def full_text_search_transcriptions(
-    db: PersistentDatabase, project_id: ProjectId, fts5_query: str
+    db: PersistentDatabase, project_id: ProjectId, fts5_query_phrases: list[str]
 ) -> list[str]:
     """
     Performs a full-text search on transcriptions, returning a list of tuples
     (transcription_id, text_output) that match the query.
     """
+
+    query = preprocess_fts5_text(fts5_query_phrases)
+
     with db.begin() as conn:
         rows = conn.execute(
             sa.text(
@@ -486,19 +517,27 @@ def full_text_search_transcriptions(
 
                 """
             ),
-            {"query": fts5_query, "project_id": str(project_id)},
+            {"query": query, "project_id": str(project_id)},
         ).all()
 
     return [row.text_output for row in rows]  # pyright: ignore[reportAny]
 
 
 def full_text_search_ai_analysis(
-    db: PersistentDatabase, project_id: ProjectId, fts5_query: str
+    db: PersistentDatabase, project_id: ProjectId, fts5_query_phrases: list[str]
 ) -> list[str]:
     """
     Performs a full-text search on AI analyses, returning a list of tuples
     (analysis_id, text) that match the query.
+
+    FTS5 query:
+    1. Search for phrases in fts5_query_phrases (combined with OR)
+    2. Do not use any punctuation in the search
     """
+
+    # remove punctuation
+    query = preprocess_fts5_text(fts5_query_phrases)
+
     with db.begin() as conn:
         rows = conn.execute(
             sa.text(
@@ -515,7 +554,7 @@ def full_text_search_ai_analysis(
                 ORDER BY rank ASC;
                 """
             ),
-            {"query": fts5_query, "project_id": str(project_id)},
+            {"query": query, "project_id": str(project_id)},
         ).all()
 
     return [row.text for row in rows]  # pyright: ignore[reportAny]
@@ -539,3 +578,50 @@ def get_most_recent_summary(
             return None
 
         return result[0]  # pyright: ignore[reportAny]
+
+
+def get_session_sequence_number(
+    db: PersistentDatabase, project_id: ProjectId, session_id: SessionId
+) -> int:
+    """
+    Gets the session sequence (e.g., 1 for the first, 2 for the second) for a given project and session ID
+    """
+
+    with db.begin() as conn:
+        result = conn.execute(  # pyright: ignore[reportAny]
+            sa.text("""
+            WITH sessions_base AS (
+                SELECT
+                    session_id,
+                    MIN(created_at) AS first_created_at
+                FROM transcriptions
+                WHERE project_id = :project_id
+                GROUP BY session_id
+            ),
+            sessions AS (
+                SELECT
+                    session_id,
+                    ROW_NUMBER() OVER (
+                        ORDER BY first_created_at, session_id
+                    ) AS session_number
+                FROM sessions_base
+            ),
+            current_session AS (
+                SELECT session_number
+                FROM sessions
+                WHERE session_id = :session_id
+            ),
+            max_session AS (
+                SELECT COALESCE(MAX(session_number), 0) AS max_session_number
+                FROM sessions
+            )
+            SELECT
+                COALESCE(
+                    (SELECT session_number FROM current_session),
+                    (SELECT max_session_number + 1 FROM max_session)
+                ) AS session_number;
+            """),
+            {"project_id": str(project_id), "session_id": str(session_id)},
+        ).scalar_one()
+
+        return result  # pyright: ignore[reportAny]

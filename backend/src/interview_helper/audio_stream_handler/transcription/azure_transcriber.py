@@ -63,12 +63,9 @@ async def setup_and_get_azure_transcriber(
     portal = await ctx.get(ANYIO_BLOCKING_PORTAL)
     assert portal is not None, "No ANYIO_BLOCKING_PORTAL in context!"
 
-    def _publish_transcript_part(text: str, _speaker_id: str | None):
-        # Prepend speaker tag so your downstream sees who said what.
-        line = f"{text}\n\n"
-
+    def _publish_transcript_part(text: str, speaker_id: str | None):
         try:
-            portal.call(accept_transcript, ctx, line, ws)
+            portal.call(accept_transcript, ctx, text, speaker_id, ws)
         except RuntimeError as e:
             # Portal has been closed (connection ended), silently ignore
             if "not running" in str(e).lower():

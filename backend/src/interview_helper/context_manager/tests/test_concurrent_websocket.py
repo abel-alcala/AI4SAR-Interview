@@ -4,7 +4,11 @@ from anyio import wait_all_tasks_blocked
 from interview_helper.tests.shared import FakeWebSocket
 
 from interview_helper.context_manager.concurrent_websocket import ConcurrentWebSocket
-from interview_helper.context_manager.messages import Envelope, TranscriptionMessage
+from interview_helper.context_manager.messages import (
+    Envelope,
+    TranscriptChunkToSend,
+    TranscriptionMessage,
+)
 
 pytestmark = pytest.mark.anyio
 
@@ -20,7 +24,9 @@ async def test_send_and_receive_message():
         # Try to start it again to show no issues
         await cws.start()
 
-        msg = TranscriptionMessage(text="hello world")
+        msg = TranscriptionMessage(
+            chunk=TranscriptChunkToSend(text="Hello, world!", speaker="Speaker 1")
+        )
         await cws.send_message(msg)
         await wait_all_tasks_blocked()  # Let writer run
 

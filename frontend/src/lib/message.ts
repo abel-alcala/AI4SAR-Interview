@@ -37,10 +37,15 @@ export interface PingMessage {
     timestamp: string;
 }
 
+interface TranscriptChunk {
+    text: string;
+    speaker: string | null;
+}
+
 export interface TranscriptionMessage {
     type: typeof MessageType.TRANSCRIPTION;
     timestamp: string;
-    text: string;
+    chunk: TranscriptChunk;
 }
 
 export interface AIResultMessage {
@@ -59,7 +64,7 @@ export interface AnalysisRow {
 export interface CatchupMessage {
     type: typeof MessageType.CATCHUP;
     timestamp: string;
-    transcript: string[];
+    transcript: TranscriptChunk[];
     insights: AnalysisRow[];
 }
 

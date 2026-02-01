@@ -106,18 +106,23 @@ class SimpleAnalyzer:
 
         @tool
         def search_transcript(
-            fts5_query: str,
+            fts5_query_phrases: list[str],
             runtime: ToolRuntime[ProjectContext],  # pyright: ignore[reportUnknownParameterType]
         ) -> str:
             """Search the transcript for relevant quotes.
 
             Args:
-                fts5_query: The FTS5 query string. Use SQLite FTS5 syntax.
+                fts5_query_phrases:
+                    Search for phrases in fts5_query_phrases (combined with OR)
+                    Do not use any punctuation in the search
+                    Use SQLite FTS5 syntax.
             Returns:
                 A string containing up to 5 most relevant quotes from the transcript.
             """
             project_id = runtime.context.project_id
-            results = full_text_search_transcriptions(db, project_id, fts5_query)
+            results = full_text_search_transcriptions(
+                db, project_id, fts5_query_phrases
+            )
 
             if len(results) == 0:
                 return "No relevant information found."
@@ -133,18 +138,21 @@ class SimpleAnalyzer:
 
         @tool
         def search_previouslly_asked_questions(
-            fts5_query: str,
+            fts5_query_phrases: list[str],
             runtime: ToolRuntime[ProjectContext],  # pyright: ignore[reportUnknownParameterType]
         ) -> str:
             """Search previously asked questions to check for duplicates.
 
             Args:
-                fts5_query: The FTS5 query string. Use SQLite FTS5 syntax.
+                fts5_query_phrases:
+                    Search for phrases in fts5_query_phrases (combined with OR)
+                    Do not use any punctuation in the search
+                    Use SQLite FTS5 syntax.
             Returns:
                 A string containing up to 5 most relevant previously asked questions.
             """
             project_id = runtime.context.project_id
-            results = full_text_search_ai_analysis(db, project_id, fts5_query)
+            results = full_text_search_ai_analysis(db, project_id, fts5_query_phrases)
 
             if len(results) == 0:
                 return "No relevant information found."

@@ -5,6 +5,12 @@ from pydantic import BaseModel, Field
 
 from interview_helper.context_manager.database import AnalysisRow
 
+
+class TranscriptChunkToSend(BaseModel):
+    text: str
+    speaker: str | None
+
+
 # WARNING: When adding new message types,
 # be sure that type is unique across all message types.
 
@@ -12,7 +18,7 @@ from interview_helper.context_manager.database import AnalysisRow
 class TranscriptionMessage(BaseModel):
     type: Literal["transcription"] = "transcription"
     timestamp: datetime = Field(default_factory=datetime.now)
-    text: str
+    chunk: TranscriptChunkToSend
 
 
 class AIResultMessage(BaseModel):
@@ -47,7 +53,7 @@ class PingMessage(BaseModel):
 class CatchupMessage(BaseModel):
     type: Literal["catchup"] = "catchup"
     timestamp: datetime = Field(default_factory=datetime.now)
-    transcript: list[str]
+    transcript: list[TranscriptChunkToSend]
     insights: list[AnalysisRow]
 
 
