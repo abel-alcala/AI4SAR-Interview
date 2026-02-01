@@ -251,7 +251,7 @@ export function AudioSender() {
                 }
 
                 // Otherwise, create a new section for this speaker
-                return [{ speaker, text }, ...prevState];
+                return [{ speaker, text: text.trim() }, ...prevState];
             });
         };
 
