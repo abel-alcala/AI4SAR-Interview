@@ -478,12 +478,16 @@ def add_ai_analysis(
 
 def preprocess_fts5_text(searches: list[str]) -> str:
     """
-    Preprocesses text for FTS5 insertion by removing punctuation
+    Preprocesses text for FTS5 queries by removing punctuation and
+    combining multiple phrases with OR for SQLite FTS5.
     """
-    return " ".join(
-        "".join(char for char in phrase if char.isalnum() or char.isspace())
+    cleaned_phrases = [
+        "".join(char for char in phrase if char.isalnum() or char.isspace()).strip()
         for phrase in searches
-    )
+    ]
+    # Filter out any phrases that became empty after cleaning
+    cleaned_phrases = [phrase for phrase in cleaned_phrases if phrase]
+    return " OR ".join(cleaned_phrases)
 
 
 def full_text_search_transcriptions(
