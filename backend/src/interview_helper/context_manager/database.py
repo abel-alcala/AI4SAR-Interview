@@ -590,16 +590,21 @@ def get_session_sequence_number(
     with db.begin() as conn:
         result = conn.execute(  # pyright: ignore[reportAny]
             sa.text("""
-            WITH sessions AS (
+            WITH sessions_base AS (
                 SELECT
                     session_id,
-                    ROW_NUMBER() OVER (
-                        PARTITION BY project_id
-                        ORDER BY created_at
-                    ) AS session_number
+                    MIN(created_at) AS first_created_at
                 FROM transcriptions
                 WHERE project_id = :project_id
                 GROUP BY session_id
+            ),
+            sessions AS (
+                SELECT
+                    session_id,
+                    ROW_NUMBER() OVER (
+                        ORDER BY first_created_at, session_id
+                    ) AS session_number
+                FROM sessions_base
             ),
             current_session AS (
                 SELECT session_number
