@@ -326,6 +326,11 @@ class AppContextManager:
         if event is not None:
             await event.wait()
 
+        # Close the text coalescer if it exists
+        if session_id in self.text_coalescer:
+            await self.text_coalescer[session_id].close()
+            del self.text_coalescer[session_id]
+
         async with self.lock:
             for k in self.store_keys[session_id]:
                 del self.store[k]
@@ -350,7 +355,7 @@ class AppContextManager:
 
             del self.session_task_group[session_id]
 
-        await task_group.__aexit__(None, None, None)
+        _ = await task_group.__aexit__(None, None, None)
 
     async def ingest_audio(
         self, session_id: SessionId, project_id: ProjectId, audio_chunk: AudioChunk

@@ -363,27 +363,41 @@ async def websocket_endpoint(
                 )
                 await cws.send_message(metadata_msg)
 
-                while True:
-                    message = await cws.receive_message()
+                try:
+                    while True:
+                        message = await cws.receive_message()
 
-                    if isinstance(message, WebRTCMessage):
-                        await handle_webrtc_message(context, message)
-                    elif isinstance(message, PingMessage):
-                        await cws.send_message(PingMessage())
-                    elif isinstance(message, DismissAIAnalysis):
-                        dismiss_ai_analysis(
-                            session_manager.db, message.analysis_id, ticket.user_id
-                        )
-                    # handle other message types...
-    except WebSocketDisconnect:
-        logger.info(f"WebSocket disconnected for session {context.session_id}")
+                        if isinstance(message, WebRTCMessage):
+                            await handle_webrtc_message(context, message)
+                        elif isinstance(message, PingMessage):
+                            await cws.send_message(PingMessage())
+                        elif isinstance(message, DismissAIAnalysis):
+                            dismiss_ai_analysis(
+                                session_manager.db, message.analysis_id, ticket.user_id
+                            )
+                        # handle other message types...
+                except WebSocketDisconnect:
+                    logger.info(
+                        f"WebSocket disconnected for session {context.session_id}"
+                    )
+                    # Exit cleanly - this is expected
     except Exception as e:
         logger.error(
-            f"Error in WebSocket handler for session {context.session_id}: {e}"
+            f"Error in WebSocket handler for session {context.session_id}: {e}",
+            exc_info=True,
         )
     finally:
-        await context.teardown()
-        logger.info(f"Closed session {context.session_id} for user {ticket.user_id}")
+        logger.debug(f"Starting teardown for session {context.session_id}")
+        try:
+            await context.teardown()
+            logger.info(
+                f"Successfully closed session {context.session_id} for user {ticket.user_id}"
+            )
+        except Exception as teardown_error:
+            logger.error(
+                f"Error during teardown for session {context.session_id}: {teardown_error}",
+                exc_info=True,
+            )
 
 
 @app.get("/project")
