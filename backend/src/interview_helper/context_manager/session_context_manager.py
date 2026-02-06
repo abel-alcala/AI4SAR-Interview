@@ -1,6 +1,6 @@
 from collections.abc import Sequence
 from langchain_core.callbacks import BaseCallbackHandler
-from interview_helper.context_manager.messages import AIResultMessage
+from interview_helper.context_manager.messages import AIResultMessage, WebSocketMessage
 from interview_helper.context_manager.resource_keys import WEBSOCKET
 from interview_helper.context_manager.types import AIResult, TranscriptId
 from interview_helper.context_manager.types import AIJob
@@ -374,6 +374,32 @@ class AppContextManager:
                 text=text, transcript_id=transcript_id
             )
 
+    async def broadcast_to_project(
+        self, project_id: ProjectId, message: WebSocketMessage
+    ):
+        """
+        Broadcast a message to all active sessions in a project
+        """
+        sessions_to_broadcast: list[SessionId] = []
+
+        async with self.lock:
+            for session_id, data in self.session_data.items():
+                if data.project == project_id and session_id in self.active_sessions:
+                    sessions_to_broadcast.append(session_id)
+
+        # Send outside the lock to avoid blocking
+        for session_id in sessions_to_broadcast:
+            ws = await self.get(session_id, WEBSOCKET)
+            logger.debug(
+                f"Broadcasting message to session {session_id} in project {project_id}: {message}"
+            )
+            if ws:
+                try:
+                    logger.debug(f"Sending message to session {session_id}: {message}")
+                    await ws.send_message(message)
+                except Exception as e:
+                    logger.error(f"Error broadcasting to session {session_id}: {e}")
+
     async def _submit_ai_processing_job(self, job: AIJob):
         assert self._workers_started
         assert self._job_send is not None
@@ -463,14 +489,10 @@ class AppContextManager:
                             sessions.add(session)
 
                     logger.info(sessions)
-                    for session in sessions:
-                        if session in self.active_sessions:
-                            ws = await self.get(session, WEBSOCKET)
-                            if ws:
-                                await ws.send_message(
-                                    AIResultMessage(insights=analyses)
-                                )
-                                logger.info(f"Sending {analyses} to {session}")
+                    # broadcast
+                    await self.broadcast_to_project(
+                        job.project_id, AIResultMessage(insights=analyses)
+                    )
 
                 except Exception:
                     # Never let an exception kill the worker or the service TG

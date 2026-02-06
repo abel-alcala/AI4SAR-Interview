@@ -1,4 +1,3 @@
-from interview_helper.context_manager.concurrent_websocket import ConcurrentWebSocket
 from interview_helper.context_manager.database import (
     add_transcription,
     get_session_sequence_number,
@@ -11,9 +10,7 @@ from interview_helper.context_manager.session_context_manager import SessionCont
 from interview_helper.context_manager.types import TranscriptId
 
 
-async def accept_transcript(
-    ctx: SessionContext, text: str, speaker: str | None, ws: ConcurrentWebSocket
-):
+async def accept_transcript(ctx: SessionContext, text: str, speaker: str | None):
     # Send transcription data over websocket
 
     # Make speaker ID unique per-session
@@ -52,11 +49,17 @@ async def accept_transcript(
         )
     )
 
-    await ws.send_message(
+    # Broadcast to all sessions in this project
+    await ctx.manager.broadcast_to_project(
+        ctx.project_id,
         TranscriptionMessage(
             type="transcription",
-            chunk=TranscriptChunkToSend(text=text, speaker=speaker),
-        )
+            chunk=TranscriptChunkToSend(
+                text=text,
+                speaker=speaker,
+                transcription_id=str(added_transcription_id),
+            ),
+        ),
     )
 
     # Ensure the session is aware of it.
