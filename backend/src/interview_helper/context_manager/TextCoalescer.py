@@ -34,6 +34,7 @@ class TextCoalescer:
             buffer: list[str] = []
             word_count = 0
             last_transcript_id: TranscriptId | None = None
+            stream_closed = False
 
             while True:
                 # Wait up to `seconds` for enough words to arrive
@@ -50,11 +51,13 @@ class TextCoalescer:
                             buffer.append(text)
                             word_count += len(text.split())
                         except anyio.EndOfStream:
-                            # Stream closed - normal shutdown
-                            # Flush any remaining buffer
-                            if buffer and last_transcript_id is not None:
-                                await handler(last_transcript_id)
-                            return
+                            # Stream closed - exit to final flush outside cancel scope
+                            stream_closed = True
+                            break
+
+                # If stream closed, exit to final flush
+                if stream_closed:
+                    break
 
                 # Timeout hit AND no data? keep waiting
                 if not buffer:
