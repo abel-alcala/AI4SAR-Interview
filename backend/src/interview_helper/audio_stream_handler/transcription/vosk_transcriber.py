@@ -24,6 +24,8 @@ async def vosk_close_transcriber(ctx: SessionContext):
         text = json.loads(rec.FinalResult())["text"]
         if text:
             await accept_transcript(ctx, text, None, ws)
+        # Unregister so a new recognizer can be created on reconnection
+        await ctx.unregister(TRANSCRIBER_SESSION)
 
 
 async def vosk_transcribe_audio_consumer(ctx: SessionContext, audio_chunk: AudioChunk):
