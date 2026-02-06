@@ -133,6 +133,13 @@ async def azure_transcribe_stop(ctx: SessionContext):
 
     if stream:
         stream.close()
+        await ctx.unregister(AZURE_STREAM)
 
     if transcriber:
         _ = await anyio.to_thread.run_sync(transcriber.stop_transcribing_async().get)
+        await ctx.unregister(AZURE_TRANSCRIBER)
+
+    # Also unregister the audio format if it exists
+    audio_format = await ctx.get(AZURE_AUDIO_FORMAT)
+    if audio_format:
+        await ctx.unregister(AZURE_AUDIO_FORMAT)
