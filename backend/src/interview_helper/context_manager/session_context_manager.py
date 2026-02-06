@@ -350,7 +350,7 @@ class AppContextManager:
 
             del self.session_task_group[session_id]
 
-        await task_group.__aexit__(None, None, None)
+        _ = await task_group.__aexit__(None, None, None)
 
     async def ingest_audio(
         self, session_id: SessionId, project_id: ProjectId, audio_chunk: AudioChunk
