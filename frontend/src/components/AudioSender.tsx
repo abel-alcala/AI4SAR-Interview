@@ -296,16 +296,48 @@ export function AudioSender() {
             // Add to global Set
             seenTranscriptionIds.current.add(transcription_id);
 
-            // Add to chunks and sort by transcription_id (ULIDs are sortable)
+            // Add to chunks, keeping them sorted by transcription_id (ULIDs are sortable)
             setTranscriptChunks((prevChunks) => {
-                const newChunks = [
-                    ...prevChunks,
-                    { transcription_id, speaker, text },
-                ].sort((a, b) =>
-                    a.transcription_id.localeCompare(b.transcription_id),
-                );
+                const newChunk = { transcription_id, speaker, text };
 
-                return newChunks;
+                // Fast path: empty list
+                if (prevChunks.length === 0) {
+                    return [newChunk];
+                }
+
+                const lastChunk = prevChunks[prevChunks.length - 1];
+
+                // Common case: IDs arrive in ascending order, so we can just append
+                if (
+                    lastChunk.transcription_id.localeCompare(
+                        transcription_id,
+                    ) <= 0
+                ) {
+                    return [...prevChunks, newChunk];
+                }
+
+                // Out-of-order chunk: insert while maintaining sort by transcription_id
+                let left = 0;
+                let right = prevChunks.length;
+
+                while (left < right) {
+                    const mid = (left + right) >> 1;
+                    const cmp = prevChunks[mid].transcription_id.localeCompare(
+                        transcription_id,
+                    );
+
+                    if (cmp <= 0) {
+                        left = mid + 1;
+                    } else {
+                        right = mid;
+                    }
+                }
+
+                return [
+                    ...prevChunks.slice(0, left),
+                    newChunk,
+                    ...prevChunks.slice(left),
+                ];
             });
         };
 
