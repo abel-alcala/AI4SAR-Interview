@@ -151,6 +151,10 @@ async def run_analysis(
             _ = add_transcription(db, user, session, project, line, None)
 
         analysis_results = await ai_analyzer.analyze(AIJob(project), [])
+        if analysis_results is None:
+            print("No analysis results returned, skipping this chunk.")
+            continue
+
         question_text = "\n".join([q.question for q in analysis_results.questions])
 
         # Add to db
@@ -160,6 +164,7 @@ async def run_analysis(
                 project_id=project,
                 text=result.question,
                 span=result.grounding_span,
+                transcript_span_id=None,
                 transcript_context_start=analysis_results.transcript_context_start,
                 transcript_context_end=analysis_results.transcript_context_end,
                 summary=analysis_results.summary,

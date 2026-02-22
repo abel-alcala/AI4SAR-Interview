@@ -58,6 +58,7 @@ async def test_question_quality(model: AzureOpenAIModel):
 
     ai_analyzer = SimpleAnalyzer(config, db)
     follow_up_questions = await ai_analyzer.analyze(AIJob(project), [])
+    assert follow_up_questions is not None
     question_text = "\n".join([q.question for q in follow_up_questions.questions])
 
     test_case = LLMTestCase(

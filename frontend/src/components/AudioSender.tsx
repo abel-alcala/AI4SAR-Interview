@@ -7,6 +7,7 @@ import {
     Button,
     Center,
     Group,
+    Highlight,
     Loader,
     Paper,
     ScrollArea,
@@ -40,9 +41,11 @@ import {
 function InsightsPanel({
     insights,
     onDismiss,
+    onSpanClick,
 }: {
     insights: AnalysisRow[];
     onDismiss: (analysisId: string) => void;
+    onSpanClick?: (transcriptId: string, spanText: string) => void;
 }) {
     const activeInsights = insights.filter((a) => !a.is_dismissed);
     const dismissedInsights = insights.filter((a) => a.is_dismissed);
@@ -66,7 +69,33 @@ function InsightsPanel({
                     {analysis.text}
                 </Text>
                 {analysis.span && (
-                    <Text size="xs" c="dimmed" fs="italic">
+                    <Text
+                        size="xs"
+                        c="dimmed"
+                        fs="italic"
+                        style={{
+                            cursor:
+                                analysis.transcript_span_id && onSpanClick
+                                    ? "pointer"
+                                    : "default",
+                            textDecoration:
+                                analysis.transcript_span_id && onSpanClick
+                                    ? "underline"
+                                    : "none",
+                        }}
+                        onClick={() => {
+                            if (
+                                analysis.transcript_span_id &&
+                                onSpanClick &&
+                                analysis.span
+                            ) {
+                                onSpanClick(
+                                    analysis.transcript_span_id,
+                                    analysis.span,
+                                );
+                            }
+                        }}
+                    >
                         "{analysis.span}"
                     </Text>
                 )}
@@ -169,6 +198,7 @@ function InsightsPanel({
 interface TranscriptSection {
     speaker: string | null;
     text: string;
+    chunks: TranscriptChunkWithId[];
 }
 
 interface TranscriptChunkWithId {
@@ -199,6 +229,13 @@ export function AudioSender() {
     const [insights, setInsights] = useState<AnalysisRow[]>([]);
     const [projectName, setProjectName] = useState<string | null>(null);
     const [showError, setShowError] = useState(false);
+
+    // State for highlighting spans in the transcript
+    const [highlightedTranscriptId, setHighlightedTranscriptId] = useState<
+        string | null
+    >(null);
+    const [highlightedSpan, setHighlightedSpan] = useState<string | null>(null);
+    const [highlightAnimationKey, setHighlightAnimationKey] = useState(0);
 
     const ws = useWebSocket();
 
@@ -245,10 +282,33 @@ export function AudioSender() {
 
     const viewportRef = useRef<HTMLDivElement | null>(null);
 
+    // Refs to store DOM elements for each transcript chunk
+    const chunkRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+
     // Stable connection state handler
     const handleConnectionChange = useCallback(
         (state: validConnectionStates) => {
             setConnectionState(state);
+        },
+        [],
+    );
+
+    // Handle clicking on a span to highlight it in the transcript
+    const handleSpanClick = useCallback(
+        (transcriptId: string, spanText: string) => {
+            setHighlightedTranscriptId(transcriptId);
+            setHighlightedSpan(spanText);
+            // Trigger animation by updating key
+            setHighlightAnimationKey((prev) => prev + 1);
+
+            // Scroll to the transcript chunk
+            const element = chunkRefs.current.get(transcriptId);
+            if (element) {
+                element.scrollIntoView({
+                    behavior: "smooth",
+                    block: "center",
+                });
+            }
         },
         [],
     );
@@ -427,7 +487,9 @@ export function AudioSender() {
 
     // Compute transcript sections from chunks for display
     const transcript = useMemo(() => {
-        const sections: TranscriptSection[] = [];
+        const sections: (TranscriptSection & {
+            chunks: TranscriptChunkWithId[];
+        })[] = [];
 
         // Chunks are already sorted by transcription_id (ULID)
         for (const chunk of transcriptChunks) {
@@ -440,9 +502,14 @@ export function AudioSender() {
                 sections[sections.length - 1].speaker === speaker
             ) {
                 sections[sections.length - 1].text += " " + text;
+                sections[sections.length - 1].chunks.push(chunk);
             } else {
                 // Create a new section for this speaker
-                sections.push({ speaker, text });
+                sections.push({
+                    speaker,
+                    text,
+                    chunks: [chunk],
+                });
             }
         }
 
@@ -639,34 +706,119 @@ export function AudioSender() {
                                                             (
                                                                 section,
                                                                 index,
-                                                            ) => (
-                                                                <Box
-                                                                    key={index}
-                                                                >
-                                                                    <Title
-                                                                        order={
-                                                                            6
+                                                            ) => {
+                                                                // Check if this section contains the highlighted chunk
+                                                                const containsHighlight =
+                                                                    highlightedTranscriptId &&
+                                                                    section.chunks.some(
+                                                                        (c) =>
+                                                                            c.transcription_id ===
+                                                                            highlightedTranscriptId,
+                                                                    );
+
+                                                                return (
+                                                                    <Box
+                                                                        key={
+                                                                            index
                                                                         }
-                                                                        mb="xs"
-                                                                    >
-                                                                        {section.speaker ??
-                                                                            "Unknown Speaker"}
-                                                                    </Title>
-                                                                    <Text
+                                                                        ref={(
+                                                                            el,
+                                                                        ) => {
+                                                                            // Store ref for the first chunk in this section
+                                                                            if (
+                                                                                el &&
+                                                                                section
+                                                                                    .chunks
+                                                                                    .length >
+                                                                                    0
+                                                                            ) {
+                                                                                chunkRefs.current.set(
+                                                                                    section
+                                                                                        .chunks[0]
+                                                                                        .transcription_id,
+                                                                                    el,
+                                                                                );
+                                                                            }
+                                                                        }}
                                                                         style={{
-                                                                            whiteSpace:
-                                                                                "pre-wrap",
-                                                                            lineHeight: 1.6,
+                                                                            backgroundColor:
+                                                                                containsHighlight
+                                                                                    ? "rgba(255, 255, 0, 0.1)"
+                                                                                    : undefined,
+                                                                            padding:
+                                                                                containsHighlight
+                                                                                    ? "8px"
+                                                                                    : undefined,
+                                                                            borderRadius:
+                                                                                containsHighlight
+                                                                                    ? "4px"
+                                                                                    : undefined,
+                                                                            transition:
+                                                                                "background-color 0.3s ease",
+                                                                            animation:
+                                                                                containsHighlight
+                                                                                    ? `${highlightAnimationKey % 2 === 0 ? "highlightPulse" : "highlightPulse-alt"} 0.4s ease-out`
+                                                                                    : undefined,
                                                                         }}
                                                                     >
-                                                                        {
-                                                                            section.text
-                                                                        }
-                                                                    </Text>
-                                                                </Box>
-                                                            ),
+                                                                        <Title
+                                                                            order={
+                                                                                6
+                                                                            }
+                                                                            mb="xs"
+                                                                        >
+                                                                            {section.speaker ??
+                                                                                "Unknown Speaker"}
+                                                                        </Title>
+                                                                        {highlightedSpan ? (
+                                                                            <Highlight
+                                                                                highlight={
+                                                                                    highlightedSpan
+                                                                                }
+                                                                                style={{
+                                                                                    whiteSpace:
+                                                                                        "pre-wrap",
+                                                                                    lineHeight: 1.6,
+                                                                                }}
+                                                                            >
+                                                                                {
+                                                                                    section.text
+                                                                                }
+                                                                            </Highlight>
+                                                                        ) : (
+                                                                            <Text
+                                                                                style={{
+                                                                                    whiteSpace:
+                                                                                        "pre-wrap",
+                                                                                    lineHeight: 1.6,
+                                                                                }}
+                                                                            >
+                                                                                {
+                                                                                    section.text
+                                                                                }
+                                                                            </Text>
+                                                                        )}
+                                                                    </Box>
+                                                                );
+                                                            },
                                                         )}
                                                     </Stack>
+                                                ) : ws.connectionStatus !==
+                                                  "connected" ? (
+                                                    <Center py="xl">
+                                                        <Stack
+                                                            align="center"
+                                                            gap="md"
+                                                        >
+                                                            <Loader size="lg" />
+                                                            <Text
+                                                                c="dimmed"
+                                                                size="sm"
+                                                            >
+                                                                Connecting...
+                                                            </Text>
+                                                        </Stack>
+                                                    </Center>
                                                 ) : (
                                                     <Text
                                                         c="dimmed"
@@ -699,6 +851,7 @@ export function AudioSender() {
                                         <InsightsPanel
                                             insights={insights}
                                             onDismiss={handleDismissInsight}
+                                            onSpanClick={handleSpanClick}
                                         />
                                     </Box>
                                 </Tabs.Panel>
@@ -807,30 +960,117 @@ export function AudioSender() {
                                             {transcript.length > 0 ? (
                                                 <Stack gap="md">
                                                     {transcript.map(
-                                                        (section, index) => (
-                                                            <Box key={index}>
-                                                                <Title
-                                                                    order={6}
-                                                                    mb="xs"
-                                                                >
-                                                                    {section.speaker ??
-                                                                        "Unknown Speaker"}
-                                                                </Title>
-                                                                <Text
+                                                        (section, index) => {
+                                                            // Check if this section contains the highlighted chunk
+                                                            const containsHighlight =
+                                                                highlightedTranscriptId &&
+                                                                section.chunks.some(
+                                                                    (c) =>
+                                                                        c.transcription_id ===
+                                                                        highlightedTranscriptId,
+                                                                );
+
+                                                            return (
+                                                                <Box
+                                                                    key={index}
+                                                                    ref={(
+                                                                        el,
+                                                                    ) => {
+                                                                        // Store ref for the first chunk in this section
+                                                                        if (
+                                                                            el &&
+                                                                            section
+                                                                                .chunks
+                                                                                .length >
+                                                                                0
+                                                                        ) {
+                                                                            chunkRefs.current.set(
+                                                                                section
+                                                                                    .chunks[0]
+                                                                                    .transcription_id,
+                                                                                el,
+                                                                            );
+                                                                        }
+                                                                    }}
                                                                     style={{
-                                                                        whiteSpace:
-                                                                            "pre-wrap",
-                                                                        lineHeight: 1.6,
+                                                                        backgroundColor:
+                                                                            containsHighlight
+                                                                                ? "rgba(255, 255, 0, 0.1)"
+                                                                                : undefined,
+                                                                        padding:
+                                                                            containsHighlight
+                                                                                ? "8px"
+                                                                                : undefined,
+                                                                        borderRadius:
+                                                                            containsHighlight
+                                                                                ? "4px"
+                                                                                : undefined,
+                                                                        transition:
+                                                                            "background-color 0.3s ease",
+                                                                        animation:
+                                                                            containsHighlight
+                                                                                ? `${highlightAnimationKey % 2 === 0 ? "highlightPulse" : "highlightPulse-alt"} 0.4s ease-out`
+                                                                                : undefined,
                                                                     }}
                                                                 >
-                                                                    {
-                                                                        section.text
-                                                                    }
-                                                                </Text>
-                                                            </Box>
-                                                        ),
+                                                                    <Title
+                                                                        order={
+                                                                            6
+                                                                        }
+                                                                        mb="xs"
+                                                                    >
+                                                                        {section.speaker ??
+                                                                            "Unknown Speaker"}
+                                                                    </Title>
+                                                                    {highlightedSpan ? (
+                                                                        <Highlight
+                                                                            highlight={
+                                                                                highlightedSpan
+                                                                            }
+                                                                            style={{
+                                                                                whiteSpace:
+                                                                                    "pre-wrap",
+                                                                                lineHeight: 1.6,
+                                                                            }}
+                                                                        >
+                                                                            {
+                                                                                section.text
+                                                                            }
+                                                                        </Highlight>
+                                                                    ) : (
+                                                                        <Text
+                                                                            style={{
+                                                                                whiteSpace:
+                                                                                    "pre-wrap",
+                                                                                lineHeight: 1.6,
+                                                                            }}
+                                                                        >
+                                                                            {
+                                                                                section.text
+                                                                            }
+                                                                        </Text>
+                                                                    )}
+                                                                </Box>
+                                                            );
+                                                        },
                                                     )}
                                                 </Stack>
+                                            ) : ws.connectionStatus !==
+                                              "connected" ? (
+                                                <Center py="xl">
+                                                    <Stack
+                                                        align="center"
+                                                        gap="md"
+                                                    >
+                                                        <Loader size="lg" />
+                                                        <Text
+                                                            c="dimmed"
+                                                            size="sm"
+                                                        >
+                                                            Connecting...
+                                                        </Text>
+                                                    </Stack>
+                                                </Center>
                                             ) : (
                                                 <Text
                                                     c="dimmed"
@@ -908,6 +1148,7 @@ export function AudioSender() {
                             <InsightsPanel
                                 insights={insights}
                                 onDismiss={handleDismissInsight}
+                                onSpanClick={handleSpanClick}
                             />
                         </Box>
                     </>
