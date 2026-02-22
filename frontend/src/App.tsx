@@ -20,7 +20,14 @@ function ProjectPage() {
 
     return (
         <WebSocketProvider projectId={projectId}>
-            <Container fluid>
+            <Container
+                fluid
+                styles={{
+                    root: {
+                        paddingInline: 0,
+                    },
+                }}
+            >
                 <AudioSender />
             </Container>
         </WebSocketProvider>

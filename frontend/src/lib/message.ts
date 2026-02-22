@@ -40,6 +40,7 @@ export interface PingMessage {
 interface TranscriptChunk {
     text: string;
     speaker: string | null;
+    transcription_id: string;
 }
 
 export interface TranscriptionMessage {

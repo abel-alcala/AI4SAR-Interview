@@ -9,6 +9,7 @@ from interview_helper.context_manager.database import AnalysisRow
 class TranscriptChunkToSend(BaseModel):
     text: str
     speaker: str | None
+    transcription_id: str
 
 
 # WARNING: When adding new message types,

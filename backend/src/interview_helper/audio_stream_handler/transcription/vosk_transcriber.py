@@ -4,10 +4,7 @@ from interview_helper.audio_stream_handler.transcription.common import accept_tr
 from interview_helper.audio_stream_handler.types import AudioChunk
 from interview_helper.context_manager.session_context_manager import SessionContext
 
-from interview_helper.context_manager.resource_keys import (
-    TRANSCRIBER_SESSION,
-    WEBSOCKET,
-)
+from interview_helper.context_manager.resource_keys import TRANSCRIBER_SESSION
 
 import numpy as np
 import json
@@ -18,12 +15,11 @@ import json
 
 async def vosk_close_transcriber(ctx: SessionContext):
     rec = await ctx.get(TRANSCRIBER_SESSION)
-    ws = await ctx.get_or_wait(WEBSOCKET)
 
     if rec is not None:
         text = json.loads(rec.FinalResult())["text"]
         if text:
-            await accept_transcript(ctx, text, None, ws)
+            await accept_transcript(ctx, text, None)
         # Unregister so a new recognizer can be created on reconnection
         await ctx.unregister(TRANSCRIBER_SESSION)
 
@@ -33,7 +29,6 @@ async def vosk_transcribe_audio_consumer(ctx: SessionContext, audio_chunk: Audio
     # so we can batch writes efficiently and finalize
     # the file size at the end.
     rec = await ctx.get(TRANSCRIBER_SESSION)
-    ws = await ctx.get_or_wait(WEBSOCKET)
 
     if rec is None:
         model = Model(str(ctx.get_settings().vosk_model_path.absolute()))
@@ -55,4 +50,4 @@ async def vosk_transcribe_audio_consumer(ctx: SessionContext, audio_chunk: Audio
             # Finalized segment
             text = json.loads(rec.Result())["text"]
             if text:
-                await accept_transcript(ctx, text, None, ws)
+                await accept_transcript(ctx, text, None)

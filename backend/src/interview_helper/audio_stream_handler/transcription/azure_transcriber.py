@@ -6,7 +6,6 @@ from interview_helper.context_manager.resource_keys import (
     AZURE_AUDIO_FORMAT,
     AZURE_STREAM,
     AZURE_TRANSCRIBER,
-    WEBSOCKET,
     ANYIO_BLOCKING_PORTAL,
 )
 from interview_helper.context_manager.session_context_manager import SessionContext
@@ -56,8 +55,6 @@ async def setup_and_get_azure_transcriber(
     )
 
     # ---- Event handlers ----
-    ws = await ctx.get_or_wait(WEBSOCKET)
-
     # We will need to call accept_transcript from azure's thread.
     # So we use anyio's blocking portal to hop back to our event loop.
     portal = await ctx.get(ANYIO_BLOCKING_PORTAL)
@@ -65,7 +62,7 @@ async def setup_and_get_azure_transcriber(
 
     def _publish_transcript_part(text: str, speaker_id: str | None):
         try:
-            portal.call(accept_transcript, ctx, text, speaker_id, ws)
+            portal.call(accept_transcript, ctx, text, speaker_id)
         except RuntimeError as e:
             # Portal has been closed (connection ended), silently ignore
             if "not running" in str(e).lower():
@@ -103,7 +100,7 @@ async def azure_transcribe_audio_consumer(ctx: SessionContext, audio_chunk: Audi
     Same signature & behavior as your Vosk consumer:
     - Consumes AudioChunk(data: list[np.ndarray[int16 or float]], framerate: int, number_of_channels: int)
     - Pushes bytes to Azure
-    - Emits finalized lines via accept_transcript(ctx, text, ws)
+    - Emits finalized lines via accept_transcript(ctx, text)
     """
     # Create (or reuse) the Azure transcriber + stream
     _ = await setup_and_get_azure_transcriber(

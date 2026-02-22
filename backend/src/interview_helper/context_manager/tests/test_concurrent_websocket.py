@@ -25,7 +25,9 @@ async def test_send_and_receive_message():
         await cws.start()
 
         msg = TranscriptionMessage(
-            chunk=TranscriptChunkToSend(text="Hello, world!", speaker="Speaker 1")
+            chunk=TranscriptChunkToSend(
+                text="Hello, world!", speaker="Speaker 1", transcription_id="123"
+            )
         )
         await cws.send_message(msg)
         await wait_all_tasks_blocked()  # Let writer run
