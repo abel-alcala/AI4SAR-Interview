@@ -59,7 +59,12 @@ function InsightsPanel({
         >
             <IconAlertTriangle size={14} style={{ marginTop: 2 }} />
             <Stack gap={4} style={{ flex: 1 }}>
-                <Text size="sm">{analysis.text}</Text>
+                <Text size="sm">
+                    <Text component="span" size="xs" c="dimmed" fw={600}>
+                        Q{analysis.ordinal}{" "}
+                    </Text>
+                    {analysis.text}
+                </Text>
                 {analysis.span && (
                     <Text size="xs" c="dimmed" fs="italic">
                         "{analysis.span}"

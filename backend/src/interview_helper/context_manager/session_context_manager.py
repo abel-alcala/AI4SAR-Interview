@@ -10,10 +10,10 @@ from typing import Protocol, runtime_checkable
 from collections import defaultdict
 from dataclasses import dataclass
 from ulid import ULID
-from typing import cast, TypeVar, Callable, Awaitable
+from typing import cast, TypeVar, Callable
+from collections.abc import Awaitable
 import anyio
 import anyio.abc
-import anyio.streams.memory
 import sys
 
 from interview_helper.config import Settings
@@ -22,12 +22,13 @@ from interview_helper.context_manager.types import (
     ProjectId,
     UserId,
     ResourceKey,
+    AnalysisId,
 )
 from interview_helper.audio_stream_handler.types import AudioChunk
 from interview_helper.context_manager.database import (
-    AnalysisRow,
     PersistentDatabase,
     add_ai_analysis,
+    get_analyses_by_ids,
 )
 import logging
 
@@ -456,7 +457,8 @@ class AppContextManager:
                         )
                         results = await self.ai_processor.analyze(job)
 
-                    analyses: list[AnalysisRow] = []
+                    # Add all analyses to database and collect their IDs
+                    analysis_ids: list[AnalysisId] = []
                     for result in results.questions:
                         id = add_ai_analysis(
                             self.db,
@@ -467,18 +469,12 @@ class AppContextManager:
                             transcript_context_end=results.transcript_context_end,
                             summary=results.summary,
                         )
+                        analysis_ids.append(id)
 
-                        analyses.append(
-                            AnalysisRow(
-                                analysis_id=str(id),
-                                text=result.question,
-                                span=result.grounding_span,
-                                is_dismissed=False,
-                                transcript_context_start=results.transcript_context_start,
-                                transcript_context_end=results.transcript_context_end,
-                                summary=results.summary,
-                            )
-                        )
+                    # Fetch analyses with computed ordinals
+                    analyses = get_analyses_by_ids(
+                        self.db, job.project_id, analysis_ids
+                    )
 
                     logger.info(results)
 

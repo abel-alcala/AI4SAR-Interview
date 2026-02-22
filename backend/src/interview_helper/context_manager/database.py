@@ -382,6 +382,7 @@ class AnalysisRow(BaseModel):
     transcript_context_start: TranscriptId
     transcript_context_end: TranscriptId
     summary: str
+    ordinal: int
 
 
 def get_all_ai_analyses(
@@ -390,10 +391,11 @@ def get_all_ai_analyses(
     """
     Gets all AI analysis results for a project, sorted by creation date (ascending)
 
-    Also joins with DismissedAIAnalysis to add
+    Also joins with DismissedAIAnalysis to add dismissed status and computes ordinal number.
     """
     with db.begin() as conn:
-        rows = conn.execute(
+        # Subquery to compute row numbers
+        subq = (
             sa.select(
                 models.AIAnalysis.analysis_id,
                 models.AIAnalysis.text,
@@ -401,17 +403,31 @@ def get_all_ai_analyses(
                 models.AIAnalysis.transcript_context_start,
                 models.AIAnalysis.transcript_context_end,
                 models.AIAnalysis.summary,
+                sa.func.row_number()
+                .over(order_by=models.AIAnalysis.analysis_id.asc())
+                .label("ordinal"),
+            ).where(models.AIAnalysis.project_id == str(project_id))
+        ).subquery()
+
+        rows = conn.execute(
+            sa.select(
+                subq.c.analysis_id,
+                subq.c.text,
+                subq.c.span,
+                subq.c.transcript_context_start,
+                subq.c.transcript_context_end,
+                subq.c.summary,
+                subq.c.ordinal,
                 sa.case(
                     (models.DismissedAIAnalysis.analysis_id.isnot(None), True),
                     else_=False,
                 ).label("is_dismissed"),
             )
-            .order_by(models.AIAnalysis.analysis_id.asc())
             .outerjoin(
                 models.DismissedAIAnalysis,
-                models.AIAnalysis.analysis_id == models.DismissedAIAnalysis.analysis_id,
+                subq.c.analysis_id == models.DismissedAIAnalysis.analysis_id,
             )
-            .where(models.AIAnalysis.project_id == str(project_id))
+            .order_by(subq.c.analysis_id.asc())
         ).all()
 
     return [
@@ -425,8 +441,82 @@ def get_all_ai_analyses(
             ),
             transcript_context_end=TranscriptId.from_str(row.transcript_context_end),  # pyright: ignore[reportAny]
             summary=row.summary,  # pyright: ignore[reportAny]
+            ordinal=row.ordinal,  # pyright: ignore[reportAny]
         )
         for row in rows
+    ]
+
+
+def get_analyses_by_ids(
+    db: PersistentDatabase, project_id: ProjectId, analysis_ids: list[AnalysisId]
+) -> list[AnalysisRow]:
+    """
+    Gets specific AI analyses by their IDs with ordinals computed.
+    Results are returned in the same order as analysis_ids.
+    """
+    if not analysis_ids:
+        return []
+
+    analysis_id_strs = [str(aid) for aid in analysis_ids]
+
+    with db.begin() as conn:
+        # Subquery to compute row numbers for all analyses in the project
+        subq = (
+            sa.select(
+                models.AIAnalysis.analysis_id,
+                models.AIAnalysis.text,
+                models.AIAnalysis.span,
+                models.AIAnalysis.transcript_context_start,
+                models.AIAnalysis.transcript_context_end,
+                models.AIAnalysis.summary,
+                sa.func.row_number()
+                .over(order_by=models.AIAnalysis.analysis_id.asc())
+                .label("ordinal"),
+            ).where(models.AIAnalysis.project_id == str(project_id))
+        ).subquery()
+
+        rows = conn.execute(
+            sa.select(
+                subq.c.analysis_id,
+                subq.c.text,
+                subq.c.span,
+                subq.c.transcript_context_start,
+                subq.c.transcript_context_end,
+                subq.c.summary,
+                subq.c.ordinal,
+                sa.case(
+                    (models.DismissedAIAnalysis.analysis_id.isnot(None), True),
+                    else_=False,
+                ).label("is_dismissed"),
+            )
+            .outerjoin(
+                models.DismissedAIAnalysis,
+                subq.c.analysis_id == models.DismissedAIAnalysis.analysis_id,
+            )
+            .where(subq.c.analysis_id.in_(analysis_id_strs))
+            .order_by(subq.c.analysis_id.asc())
+        ).all()
+
+    # Create a mapping for easy lookup
+    analyses_map = {
+        row.analysis_id: AnalysisRow(  # pyright: ignore[reportAny]
+            analysis_id=row.analysis_id,  # pyright: ignore[reportAny]
+            text=row.text,  # pyright: ignore[reportAny]
+            span=row.span,  # pyright: ignore[reportAny]
+            is_dismissed=row.is_dismissed,  # pyright: ignore[reportAny]
+            transcript_context_start=TranscriptId.from_str(
+                row.transcript_context_start  # pyright: ignore[reportAny]
+            ),
+            transcript_context_end=TranscriptId.from_str(row.transcript_context_end),  # pyright: ignore[reportAny]
+            summary=row.summary,  # pyright: ignore[reportAny]
+            ordinal=row.ordinal,  # pyright: ignore[reportAny]
+        )
+        for row in rows
+    }
+
+    # Return in the same order as requested
+    return [
+        analyses_map[aid_str] for aid_str in analysis_id_strs if aid_str in analyses_map
     ]
 
 
