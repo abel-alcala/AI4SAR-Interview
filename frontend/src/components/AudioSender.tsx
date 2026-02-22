@@ -322,9 +322,10 @@ export function AudioSender() {
 
                 while (left < right) {
                     const mid = (left + right) >> 1;
-                    const cmp = prevChunks[mid].transcription_id.localeCompare(
-                        transcription_id,
-                    );
+                    const cmp =
+                        prevChunks[mid].transcription_id.localeCompare(
+                            transcription_id,
+                        );
 
                     if (cmp <= 0) {
                         left = mid + 1;
