@@ -1,7 +1,7 @@
 from collections.abc import Sequence
 from dataclasses import dataclass
 from langfuse.langchain.CallbackHandler import LangchainCallbackHandler
-from langchain_core.callbacks import BaseCallbackHandler
+from langchain_core.callbacks import BaseCallbackHandler, Callbacks
 from ulid import ULID
 from interview_helper.config import Settings
 from interview_helper.context_manager.database import (
@@ -213,12 +213,17 @@ class SimpleAnalyzer:
             Please use the tools in order to detect any duplicates or gain further context by searching the history.\
         """)
 
+        callback_list: Callbacks = []
+        if hasattr(self, "langfuse_handler"):
+            callback_list.append(self.langfuse_handler)
+
+        if callbacks:
+            callback_list.extend(callbacks)
+
         response = await self.llm.ainvoke(  # pyright: ignore[reportUnknownMemberType]
             {"messages": [{"role": "user", "content": prompt}]},
             {
-                "callbacks": list(callbacks) + [self.langfuse_handler]
-                if callbacks is not None
-                else [self.langfuse_handler]
+                "callbacks": callback_list,
             },
             context=ProjectContext(project_id=job.project_id),
         )

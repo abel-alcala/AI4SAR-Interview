@@ -376,22 +376,6 @@
         ],
         "./src/interview_helper/context_manager/session_context_manager.py": [
             {
-                "code": "reportDeprecated",
-                "range": {
-                    "startColumn": 44,
-                    "endColumn": 53,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportUnusedImport",
-                "range": {
-                    "startColumn": 7,
-                    "endColumn": 27,
-                    "lineCount": 1
-                }
-            },
-            {
                 "code": "reportUnannotatedClassAttribute",
                 "range": {
                     "startColumn": 13,

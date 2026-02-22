@@ -60,6 +60,7 @@ export interface AnalysisRow {
     text: string;
     span: string | null;
     is_dismissed: boolean;
+    ordinal: number;
 }
 
 export interface CatchupMessage {
