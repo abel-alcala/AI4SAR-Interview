@@ -336,6 +336,7 @@ async def websocket_endpoint(
                         TranscriptChunkToSend(
                             text=transcript["text_output"],
                             speaker=transcript["speaker"],
+                            transcription_id=str(transcript["transcription_id"]),
                         )
                         for transcript in transcripts
                     ]
@@ -375,29 +376,22 @@ async def websocket_endpoint(
                             dismiss_ai_analysis(
                                 session_manager.db, message.analysis_id, ticket.user_id
                             )
+                            # Broadcast the dismissal to all sessions in this project
+                            await session_manager.broadcast_to_project(
+                                context.project_id, message
+                            )
                         # handle other message types...
                 except WebSocketDisconnect:
                     logger.info(
                         f"WebSocket disconnected for session {context.session_id}"
                     )
-                    # Exit cleanly - this is expected
     except Exception as e:
         logger.error(
-            f"Error in WebSocket handler for session {context.session_id}: {e}",
-            exc_info=True,
+            f"Error in WebSocket handler for session {context.session_id}: {e}"
         )
     finally:
-        logger.debug(f"Starting teardown for session {context.session_id}")
-        try:
-            await context.teardown()
-            logger.info(
-                f"Successfully closed session {context.session_id} for user {ticket.user_id}"
-            )
-        except Exception as teardown_error:
-            logger.error(
-                f"Error during teardown for session {context.session_id}: {teardown_error}",
-                exc_info=True,
-            )
+        await context.teardown()
+        logger.info(f"Closed session {context.session_id} for user {ticket.user_id}")
 
 
 @app.get("/project")
