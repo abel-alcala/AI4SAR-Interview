@@ -71,9 +71,11 @@ class Settings(BaseSettings):
     azure_speech_key: SecretStr | None = Field(alias="AZURE_SPEECH_KEY", default=None)
     azure_speech_region: str | None = Field(alias="AZURE_SPEECH_REGION", default=None)
 
-    LANGFUSE_SECRET_KEY: SecretStr | None = Field(alias="LANGFUSE_SECRET_KEY")
-    LANGFUSE_PUBLIC_KEY: str | None = Field(alias="LANGFUSE_PUBLIC_KEY")
-    LANGFUSE_BASE_URL: str | None = Field(alias="LANGFUSE_BASE_URL")
+    LANGFUSE_SECRET_KEY: SecretStr | None = Field(
+        alias="LANGFUSE_SECRET_KEY", default=None
+    )
+    LANGFUSE_PUBLIC_KEY: str | None = Field(alias="LANGFUSE_PUBLIC_KEY", default=None)
+    LANGFUSE_BASE_URL: str | None = Field(alias="LANGFUSE_BASE_URL", default=None)
 
     @model_validator(mode="after")
     def check_azure_fields_together(self):
