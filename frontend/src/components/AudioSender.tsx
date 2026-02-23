@@ -11,6 +11,7 @@ import {
     type ProjectMetadataMessage,
     type AnalysisRow,
     type UpdateAIAnalysisTag,
+    type RecordingStateMessage,
 } from "../lib/message";
 import { WebSocketErrorBanner } from "./audio-sender/WebSocketErrorBanner";
 import { MobileLayout } from "./audio-sender/MobileLayout";
@@ -50,6 +51,12 @@ export function AudioSender() {
     const [insights, setInsights] = useState<AnalysisRow[]>([]);
     const [projectName, setProjectName] = useState<string | null>(null);
     const [showError, setShowError] = useState(false);
+
+    // State for tracking if someone else is recording
+    const [isRecordingByOtherUser, setIsRecordingByOtherUser] = useState(false);
+    const [recordingUserName, setRecordingUserName] = useState<string | null>(
+        null,
+    );
 
     // State for highlighting spans in the transcript
     const [highlightedTranscriptId, setHighlightedTranscriptId] = useState<
@@ -538,6 +545,20 @@ export function AudioSender() {
         };
     }, [ws]);
 
+    // Register Recording State Message handler
+    useEffect(() => {
+        const handleRecordingState = (message: RecordingStateMessage) => {
+            setIsRecordingByOtherUser(message.is_recording);
+            setRecordingUserName(message.user_name);
+        };
+
+        ws.registerMessageHandler("recording_state", handleRecordingState);
+
+        return () => {
+            ws.deregisterMessageHandler("recording_state");
+        };
+    }, [ws]);
+
     // (Optional) Example: if later you emit insight messages from the server,
     // register a handler here. For now, this just shows how to wire it up.
     // useEffect(() => {
@@ -550,12 +571,28 @@ export function AudioSender() {
     function startSendingAudio() {
         if (webrtcClient.current) {
             webrtcClient.current.startAudioStream();
+
+            // Send recording state message
+            ws.sendMessage({
+                type: MessageType.RECORDING_STATE,
+                timestamp: new Date().toISOString(),
+                is_recording: true,
+                user_name: null, // Backend will fill in the user name
+            });
         }
     }
 
     function stopSendingAudio() {
         if (webrtcClient.current) {
             webrtcClient.current.stopAudioStream();
+
+            // Send recording state message
+            ws.sendMessage({
+                type: MessageType.RECORDING_STATE,
+                timestamp: new Date().toISOString(),
+                is_recording: false,
+                user_name: null, // Backend will fill in the user name
+            });
         }
     }
 
@@ -616,6 +653,8 @@ export function AudioSender() {
                         isWebSocketConnected={
                             ws.connectionStatus === "connected"
                         }
+                        isRecordingByOtherUser={isRecordingByOtherUser}
+                        recordingUserName={recordingUserName}
                         onRegisterChunkRef={handleRegisterChunkRef}
                         onStarInsight={handleStarInsight}
                         onUnstarInsight={handleUnstarInsight}
@@ -640,6 +679,8 @@ export function AudioSender() {
                         isWebSocketConnected={
                             ws.connectionStatus === "connected"
                         }
+                        isRecordingByOtherUser={isRecordingByOtherUser}
+                        recordingUserName={recordingUserName}
                         onRegisterChunkRef={handleRegisterChunkRef}
                         onStarInsight={handleStarInsight}
                         onUnstarInsight={handleUnstarInsight}

@@ -9,6 +9,7 @@ export const MessageType = {
     CATCHUP: "catchup",
     PROJECT_METADATA: "project_metadata",
     UPDATE_AI_ANALYSIS_TAG: "update_ai_analysis_tag",
+    RECORDING_STATE: "recording_state",
 } as const;
 
 interface OfferMessage {
@@ -86,6 +87,13 @@ export interface UpdateAIAnalysisTag {
     tag: "starred" | "dismissed" | "starred_dismissed" | null;
 }
 
+export interface RecordingStateMessage {
+    type: typeof MessageType.RECORDING_STATE;
+    timestamp: string;
+    is_recording: boolean;
+    user_name: string | null;
+}
+
 export type SignalingMessage =
     | OfferMessage
     | AnswerMessage
@@ -98,7 +106,8 @@ export type Message =
     | AIResultMessage
     | CatchupMessage
     | ProjectMetadataMessage
-    | UpdateAIAnalysisTag;
+    | UpdateAIAnalysisTag
+    | RecordingStateMessage;
 
 export interface Envelope {
     message: Message;

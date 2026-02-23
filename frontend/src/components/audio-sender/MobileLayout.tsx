@@ -29,6 +29,8 @@ interface MobileLayoutProps {
     highlightAnimationKey: number;
     viewportRef: React.RefObject<HTMLDivElement | null>;
     isWebSocketConnected: boolean;
+    isRecordingByOtherUser: boolean;
+    recordingUserName: string | null;
     onRegisterChunkRef: (
         transcriptionId: string,
         element: HTMLDivElement,
@@ -54,6 +56,8 @@ export function MobileLayout({
     highlightAnimationKey,
     viewportRef,
     isWebSocketConnected,
+    isRecordingByOtherUser,
+    recordingUserName,
     onRegisterChunkRef,
     onStarInsight,
     onUnstarInsight,
@@ -177,6 +181,8 @@ export function MobileLayout({
             <RecordingControls
                 connectionState={connectionState}
                 isWebSocketConnected={isWebSocketConnected}
+                isRecordingByOtherUser={isRecordingByOtherUser}
+                recordingUserName={recordingUserName}
                 onStartRecording={onStartRecording}
                 onStopRecording={onStopRecording}
                 size="lg"

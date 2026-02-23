@@ -14,6 +14,7 @@ from interview_helper.context_manager.messages import (
     CatchupMessage,
     ProjectMetadataMessage,
     TranscriptChunkToSend,
+    RecordingStateMessage,
 )
 from starlette.responses import RedirectResponse
 from interview_helper.security.http import (
@@ -53,6 +54,7 @@ from interview_helper.context_manager.database import (
     get_project_by_id,
     get_all_transcripts,
     get_all_ai_analyses,
+    get_user_by_id,
 )
 from interview_helper.context_manager.types import ProjectId
 
@@ -364,6 +366,20 @@ async def websocket_endpoint(
                 )
                 await cws.send_message(metadata_msg)
 
+                # Send current recording state if someone is recording
+                recording_state = await session_manager.get_recording_state(
+                    project_id_typed
+                )
+                if recording_state:
+                    recording_session_id, recording_user_name = recording_state
+                    # Only send if it's not this session recording
+                    if recording_session_id != context.session_id:
+                        recording_state_msg = RecordingStateMessage(
+                            is_recording=True,
+                            user_name=recording_user_name,
+                        )
+                        await cws.send_message(recording_state_msg)
+
                 try:
                     while True:
                         message = await cws.receive_message()
@@ -383,6 +399,18 @@ async def websocket_endpoint(
                             await session_manager.broadcast_to_project(
                                 context.project_id, message
                             )
+                        elif isinstance(message, RecordingStateMessage):
+                            # Get the user name for broadcasting
+                            user = get_user_by_id(session_manager.db, ticket.user_id)
+                            user_name = user.full_name if user else "Unknown User"
+
+                            # Update and broadcast the recording state
+                            await session_manager.set_recording_state(
+                                context.project_id,
+                                context.session_id,
+                                user_name,
+                                message.is_recording,
+                            )
                         # handle other message types...
                 except WebSocketDisconnect:
                     logger.info(
@@ -393,6 +421,13 @@ async def websocket_endpoint(
             f"Error in WebSocket handler for session {context.session_id}: {e}"
         )
     finally:
+        # Clear recording state if this session was recording
+        user = get_user_by_id(session_manager.db, ticket.user_id)
+        user_name = user.full_name if user else "Unknown User"
+        await session_manager.set_recording_state(
+            project_id_typed, context.session_id, user_name, False
+        )
+
         await context.teardown()
         logger.info(f"Closed session {context.session_id} for user {ticket.user_id}")
 

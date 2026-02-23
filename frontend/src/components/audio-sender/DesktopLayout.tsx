@@ -28,6 +28,8 @@ interface DesktopLayoutProps {
     highlightAnimationKey: number;
     viewportRef: React.RefObject<HTMLDivElement | null>;
     isWebSocketConnected: boolean;
+    isRecordingByOtherUser: boolean;
+    recordingUserName: string | null;
     onRegisterChunkRef: (
         transcriptionId: string,
         element: HTMLDivElement,
@@ -53,6 +55,8 @@ export function DesktopLayout({
     highlightAnimationKey,
     viewportRef,
     isWebSocketConnected,
+    isRecordingByOtherUser,
+    recordingUserName,
     onRegisterChunkRef,
     onStarInsight,
     onUnstarInsight,
@@ -92,6 +96,8 @@ export function DesktopLayout({
                 <RecordingControls
                     connectionState={connectionState}
                     isWebSocketConnected={isWebSocketConnected}
+                    isRecordingByOtherUser={isRecordingByOtherUser}
+                    recordingUserName={recordingUserName}
                     onStartRecording={onStartRecording}
                     onStopRecording={onStopRecording}
                 />
