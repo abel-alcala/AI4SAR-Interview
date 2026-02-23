@@ -1,7 +1,7 @@
 from collections.abc import Sequence
 from pydantic import BaseModel
 from sqlalchemy.sql.sqltypes import DateTime
-from typing import TypedDict
+from typing import Literal, TypedDict
 from interview_helper.context_manager.types import (
     AnalysisId,
     ProjectId,
@@ -379,8 +379,7 @@ class AnalysisRow(BaseModel):
     text: str
     span: str | None
     transcript_span_id: TranscriptId | None
-    is_dismissed: bool
-    tag: str | None
+    tag: Literal["starred", "dismissed", "starred_dismissed"] | None
     transcript_context_start: TranscriptId
     transcript_context_end: TranscriptId
     summary: str
@@ -433,7 +432,6 @@ def get_all_ai_analyses(
             transcript_span_id=TranscriptId.from_str(row.transcript_span_id)  # pyright: ignore[reportAny]
             if row.transcript_span_id  # pyright: ignore[reportAny]
             else None,
-            is_dismissed=row.tag == "dismissed" if row.tag else False,  # pyright: ignore[reportAny]
             tag=row.tag,  # pyright: ignore[reportAny]
             transcript_context_start=TranscriptId.from_str(
                 row.transcript_context_start  # pyright: ignore[reportAny]
@@ -498,7 +496,6 @@ def get_analyses_by_ids(
             analysis_id=row.analysis_id,  # pyright: ignore[reportAny]
             text=row.text,  # pyright: ignore[reportAny]
             span=row.span,  # pyright: ignore[reportAny]
-            is_dismissed=row.tag == "dismissed" if row.tag else False,  # pyright: ignore[reportAny]
             tag=row.tag,  # pyright: ignore[reportAny]
             transcript_context_start=TranscriptId.from_str(
                 row.transcript_context_start  # pyright: ignore[reportAny]
