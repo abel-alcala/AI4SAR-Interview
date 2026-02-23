@@ -33,7 +33,10 @@ interface MobileLayoutProps {
         transcriptionId: string,
         element: HTMLDivElement,
     ) => void;
+    onStarInsight: (analysisId: string) => void;
+    onUnstarInsight: (analysisId: string) => void;
     onDismissInsight: (analysisId: string) => void;
+    onUndoDismiss: (analysisId: string) => void;
     onSpanClick: (transcriptId: string, spanText: string) => void;
     onStartRecording: () => void;
     onStopRecording: () => void;
@@ -52,7 +55,10 @@ export function MobileLayout({
     viewportRef,
     isWebSocketConnected,
     onRegisterChunkRef,
+    onStarInsight,
+    onUnstarInsight,
     onDismissInsight,
+    onUndoDismiss,
     onSpanClick,
     onStartRecording,
     onStopRecording,
@@ -157,7 +163,10 @@ export function MobileLayout({
                         <Box p="md" style={{ flex: 1, overflow: "hidden" }}>
                             <InsightsPanel
                                 insights={insights}
+                                onStar={onStarInsight}
+                                onUnstar={onUnstarInsight}
                                 onDismiss={onDismissInsight}
+                                onUndoDismiss={onUndoDismiss}
                                 onSpanClick={handleSpanClick}
                             />
                         </Box>

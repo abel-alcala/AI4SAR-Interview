@@ -32,7 +32,10 @@ interface DesktopLayoutProps {
         transcriptionId: string,
         element: HTMLDivElement,
     ) => void;
+    onStarInsight: (analysisId: string) => void;
+    onUnstarInsight: (analysisId: string) => void;
     onDismissInsight: (analysisId: string) => void;
+    onUndoDismiss: (analysisId: string) => void;
     onSpanClick: (transcriptId: string, spanText: string) => void;
     onStartRecording: () => void;
     onStopRecording: () => void;
@@ -51,7 +54,10 @@ export function DesktopLayout({
     viewportRef,
     isWebSocketConnected,
     onRegisterChunkRef,
+    onStarInsight,
+    onUnstarInsight,
     onDismissInsight,
+    onUndoDismiss,
     onSpanClick,
     onStartRecording,
     onStopRecording,
@@ -95,7 +101,10 @@ export function DesktopLayout({
             <Box style={{ flex: "0 0 340px", overflow: "hidden" }}>
                 <InsightsPanel
                     insights={insights}
+                    onStar={onStarInsight}
+                    onUnstar={onUnstarInsight}
                     onDismiss={onDismissInsight}
+                    onUndoDismiss={onUndoDismiss}
                     onSpanClick={onSpanClick}
                 />
             </Box>

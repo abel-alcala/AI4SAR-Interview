@@ -80,22 +80,10 @@ class AIAnalysis(Base):
 
     summary: Mapped[str] = mapped_column(sa.Text, nullable=False)
 
+    tag: Mapped[str | None] = mapped_column(sa.String(50), nullable=True)
 
-class DismissedAIAnalysis(Base):
-    __tablename__: str = "dismissed_ai_analyses"
-
-    dismissed_analysis_id: Mapped[str] = mapped_column(sa.String(26), primary_key=True)
-
-    analysis_id: Mapped[str] = mapped_column(
-        sa.String(26), ForeignKey("ai_analyses.analysis_id"), nullable=False
-    )
-
-    user_id: Mapped[str] = mapped_column(
-        sa.String(26), ForeignKey("users.user_id"), nullable=False
-    )
-
-    created_at: Mapped[DateTime] = mapped_column(
-        sa.DateTime, nullable=False, server_default=sa.func.now()
+    time_tag_changed: Mapped[DateTime | None] = mapped_column(
+        sa.DateTime, nullable=True
     )
 
 

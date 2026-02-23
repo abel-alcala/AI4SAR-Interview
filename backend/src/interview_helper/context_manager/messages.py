@@ -65,10 +65,11 @@ class ProjectMetadataMessage(BaseModel):
     project_name: str
 
 
-class DismissAIAnalysis(BaseModel):
-    type: Literal["dismiss_ai_analysis"] = "dismiss_ai_analysis"
+class UpdateAIAnalysisTag(BaseModel):
+    type: Literal["update_ai_analysis_tag"] = "update_ai_analysis_tag"
     timestamp: datetime = Field(default_factory=datetime.now)
     analysis_id: str
+    tag: Literal["starred", "dismissed", "starred_dismissed"] | None
 
 
 WebSocketMessage = (
@@ -79,7 +80,7 @@ WebSocketMessage = (
     | AIResultMessage
     | CatchupMessage
     | ProjectMetadataMessage
-    | DismissAIAnalysis
+    | UpdateAIAnalysisTag
 )
 
 

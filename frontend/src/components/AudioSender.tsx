@@ -10,7 +10,7 @@ import {
     type CatchupMessage,
     type ProjectMetadataMessage,
     type AnalysisRow,
-    type DismissAIAnalysis,
+    type UpdateAIAnalysisTag,
 } from "../lib/message";
 import { WebSocketErrorBanner } from "./audio-sender/WebSocketErrorBanner";
 import { MobileLayout } from "./audio-sender/MobileLayout";
@@ -79,26 +79,111 @@ export function AudioSender() {
         null,
     );
 
-    // Handle dismissing an insight
-    const handleDismissInsight = useCallback(
+    // Handle starring an insight
+    const handleStarInsight = useCallback(
         (analysisId: string) => {
             // Update local state immediately
             setInsights((prevState) =>
                 prevState.map((insight) =>
                     insight.analysis_id === analysisId
-                        ? { ...insight, is_dismissed: true }
+                        ? { ...insight, tag: "starred" }
                         : insight,
                 ),
             );
 
-            // Send dismiss message to backend
+            // Send update tag message to backend
             ws.sendMessage({
-                type: MessageType.DISMISS_AI_ANALYSIS,
+                type: MessageType.UPDATE_AI_ANALYSIS_TAG,
                 timestamp: new Date().toISOString(),
                 analysis_id: analysisId,
+                tag: "starred",
             });
         },
         [ws],
+    );
+
+    // Handle unstarring an insight
+    const handleUnstarInsight = useCallback(
+        (analysisId: string) => {
+            // Update local state immediately
+            setInsights((prevState) =>
+                prevState.map((insight) =>
+                    insight.analysis_id === analysisId
+                        ? { ...insight, tag: null }
+                        : insight,
+                ),
+            );
+
+            // Send update tag message to backend
+            ws.sendMessage({
+                type: MessageType.UPDATE_AI_ANALYSIS_TAG,
+                timestamp: new Date().toISOString(),
+                analysis_id: analysisId,
+                tag: null,
+            });
+        },
+        [ws],
+    );
+
+    // Handle dismissing an insight
+    const handleDismissInsight = useCallback(
+        (analysisId: string) => {
+            // Send update tag message to backend
+            const insight = insights.find((i) => i.analysis_id === analysisId);
+            const newTag =
+                insight?.tag === "starred" ? "starred_dismissed" : "dismissed";
+
+            // Update local state immediately
+            setInsights((prevState) =>
+                prevState.map((insight) => {
+                    if (insight.analysis_id === analysisId) {
+                        // If it's starred, mark as starred_dismissed, otherwise just dismissed
+                        return { ...insight, tag: newTag };
+                    }
+                    return insight;
+                }),
+            );
+
+            ws.sendMessage({
+                type: MessageType.UPDATE_AI_ANALYSIS_TAG,
+                timestamp: new Date().toISOString(),
+                analysis_id: analysisId,
+                tag: newTag,
+            });
+        },
+        [ws, insights],
+    );
+
+    // Handle undoing a dismiss (restore to active or starred)
+    const handleUndoDismiss = useCallback(
+        (analysisId: string) => {
+            // Update local state immediately
+            setInsights((prevState) =>
+                prevState.map((insight) => {
+                    if (insight.analysis_id === analysisId) {
+                        // If it was starred_dismissed, restore to starred, otherwise to active (null)
+                        const newTag =
+                            insight.tag === "starred_dismissed"
+                                ? "starred"
+                                : null;
+                        return { ...insight, tag: newTag };
+                    }
+                    return insight;
+                }),
+            );
+
+            // Send update tag message to backend
+            const insight = insights.find((i) => i.analysis_id === analysisId);
+            const newTag =
+                insight?.tag === "starred_dismissed" ? "starred" : null;
+            ws.sendMessage({
+                type: MessageType.UPDATE_AI_ANALYSIS_TAG,
+                timestamp: new Date().toISOString(),
+                analysis_id: analysisId,
+                tag: newTag,
+            });
+        },
+        [ws, insights],
     );
 
     const viewportRef = useRef<HTMLDivElement | null>(null);
@@ -432,25 +517,24 @@ export function AudioSender() {
     }, [ws]);
 
     useEffect(() => {
-        const handleDismissAIAnalysis = (message: DismissAIAnalysis) => {
-            // Set insight to dismissed in local state so it disappears
-            // from active insights list
+        const handleUpdateAIAnalysisTag = (message: UpdateAIAnalysisTag) => {
+            // Update insight tag in local state
             setInsights((prevState) =>
                 prevState.map((insight) =>
                     insight.analysis_id === message.analysis_id
-                        ? { ...insight, is_dismissed: true }
+                        ? { ...insight, tag: message.tag }
                         : insight,
                 ),
             );
         };
 
         ws.registerMessageHandler(
-            "dismiss_ai_analysis",
-            handleDismissAIAnalysis,
+            "update_ai_analysis_tag",
+            handleUpdateAIAnalysisTag,
         );
 
         return () => {
-            ws.deregisterMessageHandler("dismiss_ai_analysis");
+            ws.deregisterMessageHandler("update_ai_analysis_tag");
         };
     }, [ws]);
 
@@ -533,7 +617,10 @@ export function AudioSender() {
                             ws.connectionStatus === "connected"
                         }
                         onRegisterChunkRef={handleRegisterChunkRef}
+                        onStarInsight={handleStarInsight}
+                        onUnstarInsight={handleUnstarInsight}
                         onDismissInsight={handleDismissInsight}
+                        onUndoDismiss={handleUndoDismiss}
                         onSpanClick={handleSpanClick}
                         onStartRecording={startSendingAudio}
                         onStopRecording={stopSendingAudio}
@@ -554,7 +641,10 @@ export function AudioSender() {
                             ws.connectionStatus === "connected"
                         }
                         onRegisterChunkRef={handleRegisterChunkRef}
+                        onStarInsight={handleStarInsight}
+                        onUnstarInsight={handleUnstarInsight}
                         onDismissInsight={handleDismissInsight}
+                        onUndoDismiss={handleUndoDismiss}
                         onSpanClick={handleSpanClick}
                         onStartRecording={startSendingAudio}
                         onStopRecording={stopSendingAudio}
