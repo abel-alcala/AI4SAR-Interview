@@ -29,7 +29,9 @@ from interview_helper.context_manager.database import (
     PersistentDatabase,
     add_ai_analysis,
     get_analyses_by_ids,
+    get_all_transcripts_since_last_analysis,
 )
+from interview_helper.context_manager.span_locator import find_span_in_transcripts
 import logging
 
 T = TypeVar("T", covariant=True)
@@ -44,7 +46,7 @@ class AIAnalyzer(Protocol):
     def __init__(self, config: Settings, db: PersistentDatabase): ...
     async def analyze(
         self, job: AIJob, callbacks: Sequence[BaseCallbackHandler] | None = None
-    ) -> AIResult: ...
+    ) -> AIResult | None: ...
 
 
 logger = logging.getLogger(__name__)
@@ -456,15 +458,29 @@ class AppContextManager:
                             "Should never happen since we check this is not None when we start background services"
                         )
                         results = await self.ai_processor.analyze(job)
+                        if results is None:
+                            continue  # No results, likely an error or empty transcript, skip job
 
                     # Add all analyses to database and collect their IDs
                     analysis_ids: list[AnalysisId] = []
+                    transcripts = get_all_transcripts_since_last_analysis(
+                        self.db, job.project_id
+                    )
+
                     for result in results.questions:
+                        # Try to locate the span in the transcripts
+                        transcript_span_id = None
+                        if result.grounding_span and transcripts:
+                            transcript_span_id = find_span_in_transcripts(
+                                result.grounding_span, transcripts
+                            )
+
                         id = add_ai_analysis(
                             self.db,
                             project_id=job.project_id,
                             text=result.question,
                             span=result.grounding_span,
+                            transcript_span_id=transcript_span_id,
                             transcript_context_start=results.transcript_context_start,
                             transcript_context_end=results.transcript_context_end,
                             summary=results.summary,
@@ -476,7 +492,9 @@ class AppContextManager:
                         self.db, job.project_id, analysis_ids
                     )
 
-                    logger.info(results)
+                    logger.info(
+                        [f"Analysis #{a.ordinal} that says {a.text}" for a in analyses]
+                    )
 
                     sessions: set[SessionId] = set()
                     for session, data in self.session_data.items():

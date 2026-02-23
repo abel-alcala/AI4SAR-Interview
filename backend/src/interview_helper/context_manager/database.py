@@ -378,6 +378,7 @@ class AnalysisRow(BaseModel):
     analysis_id: str
     text: str
     span: str | None
+    transcript_span_id: TranscriptId | None
     is_dismissed: bool
     transcript_context_start: TranscriptId
     transcript_context_end: TranscriptId
@@ -400,6 +401,7 @@ def get_all_ai_analyses(
                 models.AIAnalysis.analysis_id,
                 models.AIAnalysis.text,
                 models.AIAnalysis.span,
+                models.AIAnalysis.transcript_span_id,
                 models.AIAnalysis.transcript_context_start,
                 models.AIAnalysis.transcript_context_end,
                 models.AIAnalysis.summary,
@@ -414,6 +416,7 @@ def get_all_ai_analyses(
                 subq.c.analysis_id,
                 subq.c.text,
                 subq.c.span,
+                subq.c.transcript_span_id,
                 subq.c.transcript_context_start,
                 subq.c.transcript_context_end,
                 subq.c.summary,
@@ -435,6 +438,9 @@ def get_all_ai_analyses(
             analysis_id=row.analysis_id,  # pyright: ignore[reportAny]
             text=row.text,  # pyright: ignore[reportAny]
             span=row.span,  # pyright: ignore[reportAny]
+            transcript_span_id=TranscriptId.from_str(row.transcript_span_id)  # pyright: ignore[reportAny]
+            if row.transcript_span_id  # pyright: ignore[reportAny]
+            else None,
             is_dismissed=row.is_dismissed,  # pyright: ignore[reportAny]
             transcript_context_start=TranscriptId.from_str(
                 row.transcript_context_start  # pyright: ignore[reportAny]
@@ -466,6 +472,7 @@ def get_analyses_by_ids(
                 models.AIAnalysis.analysis_id,
                 models.AIAnalysis.text,
                 models.AIAnalysis.span,
+                models.AIAnalysis.transcript_span_id,
                 models.AIAnalysis.transcript_context_start,
                 models.AIAnalysis.transcript_context_end,
                 models.AIAnalysis.summary,
@@ -480,6 +487,7 @@ def get_analyses_by_ids(
                 subq.c.analysis_id,
                 subq.c.text,
                 subq.c.span,
+                subq.c.transcript_span_id,
                 subq.c.transcript_context_start,
                 subq.c.transcript_context_end,
                 subq.c.summary,
@@ -507,6 +515,9 @@ def get_analyses_by_ids(
             transcript_context_start=TranscriptId.from_str(
                 row.transcript_context_start  # pyright: ignore[reportAny]
             ),
+            transcript_span_id=TranscriptId.from_str(row.transcript_span_id)  # pyright: ignore[reportAny]
+            if row.transcript_span_id  # pyright: ignore[reportAny]
+            else None,
             transcript_context_end=TranscriptId.from_str(row.transcript_context_end),  # pyright: ignore[reportAny]
             summary=row.summary,  # pyright: ignore[reportAny]
             ordinal=row.ordinal,  # pyright: ignore[reportAny]
@@ -541,6 +552,7 @@ def add_ai_analysis(
     project_id: ProjectId,
     text: str,
     span: str | None,
+    transcript_span_id: TranscriptId | None,
     transcript_context_start: TranscriptId,
     transcript_context_end: TranscriptId,
     summary: str,
@@ -557,6 +569,9 @@ def add_ai_analysis(
                 "project_id": str(project_id),
                 "text": text,
                 "span": span,
+                "transcript_span_id": str(transcript_span_id)
+                if transcript_span_id
+                else None,
                 "transcript_context_start": str(transcript_context_start),
                 "transcript_context_end": str(transcript_context_end),
                 "summary": summary,

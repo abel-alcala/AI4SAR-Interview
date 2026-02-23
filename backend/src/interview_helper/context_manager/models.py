@@ -67,6 +67,10 @@ class AIAnalysis(Base):
 
     span: Mapped[str] = mapped_column(sa.Text, nullable=True)
 
+    transcript_span_id: Mapped[str] = mapped_column(
+        sa.String(26), ForeignKey("transcriptions.transcription_id"), nullable=True
+    )
+
     transcript_context_start: Mapped[str] = mapped_column(
         sa.String(26), ForeignKey("transcriptions.transcription_id"), nullable=False
     )

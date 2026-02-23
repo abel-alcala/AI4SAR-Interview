@@ -24,7 +24,10 @@ from langchain.agents import create_agent  # pyright: ignore[reportUnknownVariab
 from pydantic import BaseModel
 from textwrap import dedent
 import logging
-from langchain.agents.structured_output import ProviderStrategy
+from langchain.agents.structured_output import (
+    ProviderStrategy,
+    StructuredOutputValidationError,
+)
 from langfuse.langchain import CallbackHandler
 from langfuse import Langfuse
 
@@ -178,7 +181,7 @@ class SimpleAnalyzer:
 
     async def analyze(
         self, job: AIJob, callbacks: Sequence[BaseCallbackHandler] | None = None
-    ) -> AIResult:
+    ) -> AIResult | None:
         """Analyze a chunk and return suggestions.
 
         Args:
@@ -220,27 +223,34 @@ class SimpleAnalyzer:
         if callbacks:
             callback_list.extend(callbacks)
 
-        response = await self.llm.ainvoke(  # pyright: ignore[reportUnknownMemberType]
-            {"messages": [{"role": "user", "content": prompt}]},
-            {
-                "callbacks": callback_list,
-            },
-            context=ProjectContext(project_id=job.project_id),
-        )
+        try:
+            response = await self.llm.ainvoke(  # pyright: ignore[reportUnknownMemberType]
+                {"messages": [{"role": "user", "content": prompt}]},
+                {
+                    "callbacks": callback_list,
+                },
+                context=ProjectContext(project_id=job.project_id),
+            )
 
-        analysis: Analysis = response["structured_response"]  # pyright: ignore[reportAny]
+            analysis: Analysis = response["structured_response"]  # pyright: ignore[reportAny]
 
-        questions = [
-            AIQuestion(question=q.question, grounding_span=q.grounding_span)
-            for q in analysis.questions
-        ]
+            questions = [
+                AIQuestion(question=q.question, grounding_span=q.grounding_span)
+                for q in analysis.questions
+            ]
 
-        return AIResult(
-            questions=questions,
-            transcript_context_start=transcripts[0]["transcription_id"],
-            transcript_context_end=transcripts[-1]["transcription_id"],
-            summary=analysis.summary,
-        )
+            return AIResult(
+                questions=questions,
+                transcript_context_start=transcripts[0]["transcription_id"],
+                transcript_context_end=transcripts[-1]["transcription_id"],
+                summary=analysis.summary,
+            )
+        except StructuredOutputValidationError as e:
+            logger.error(
+                f"LLM returned invalid structured output for project {job.project_id}: {e}"
+            )
+            # Return empty result as fallback
+            return None
 
 
 class FakeAnalyzer:
