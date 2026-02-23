@@ -10,52 +10,23 @@ In Search and Rescue (SAR) operations, time pressure and inexperience can lead t
 
 **Ultimate Goal:** Accelerate clue discovery and reduce the likelihood of critical information being overlooked in time-sensitive SAR missions.
 
-## Architecture
+## Docker Compose Installation
 
-### Backend (`/backend`)
-
-- **Python-based** transcription and processing server
-- **WebRTC** real-time audio streaming
-- **Vosk** speech-to-text processing
-- **WebSocket** communication
-- Structured data models with **Pydantic**
-
-### Frontend (`/frontend`)
-
-- **React + TypeScript** user interface
-- **Vite** development server
-- **TailwindCSS** styling
-- Real-time WebRTC audio capture and streaming
-
-### Tech Stack
-
-- **AI/ML:** LangGraph, LangChain, Langfuse
-- **Backend:** Python 3.13+, WebRTC (aiortc), WebSockets, Vosk
-- **Frontend:** React 19, TypeScript, Vite, TailwindCSS
-- **Real-time:** WebRTC for audio streaming
-- **Data:** Pydantic for structured models
-
-## Prerequisites
-
-- **Python 3.13+**
-- **Node.js** (for frontend)
-- **pnpm** (package manager)
-- **mkcert** (for SSL certificates)
-- **uv** (Python package manager)
-
-## Installation & Setup
-
-### 1. SSL Certificates
-
-Generate local SSL certificates for HTTPS (required for WebRTC):
+For docker compose, copy .env.example to .env and fill in all the required environment variables. Then expose expose nginx's port 80 and bring up the system:
 
 ```bash
-just create-cert
+docker compose up
 ```
+
+## Development Installation
+
+### 1. Backend Environment Setup
+
+Copy the .env.example to .env, add the required environment variables.
 
 ### 2. Backend Setup
 
-Copy the .env.example to .env, then to install dependencies and setup the database:
+Run these commands to install dependencies and setup the database:
 
 ```bash
 cd backend
@@ -63,16 +34,12 @@ uv sync
 uv run alembic upgrade head
 ```
 
-### 3. Frontend Setup
+### 2. Frontend Setup
 
 ```bash
 cd frontend
 pnpm install
 ```
-
-### 4. Vosk Model Download
-
-The system uses Vosk for speech recognition. Please download a model from https://alphacephei.com/vosk/models and place into `backend/vosk_models/`.
 
 ### 5. Pre-Commit Hook Setup
 
@@ -82,7 +49,7 @@ In the root of the repo run:
 pre-commit install
 ```
 
-## Development
+## Run for Development
 
 ### Start Backend Server
 
@@ -99,6 +66,8 @@ pnpm dev
 ```
 
 The frontend will be available at `https://localhost:5173` and the backend WebRTC server runs on the configured port.
+
+## Other Tasks
 
 ### Structurizr
 
