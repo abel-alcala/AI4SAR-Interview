@@ -571,28 +571,12 @@ export function AudioSender() {
     function startSendingAudio() {
         if (webrtcClient.current) {
             webrtcClient.current.startAudioStream();
-
-            // Send recording state message
-            ws.sendMessage({
-                type: MessageType.RECORDING_STATE,
-                timestamp: new Date().toISOString(),
-                is_recording: true,
-                user_name: null, // Backend will fill in the user name
-            });
         }
     }
 
     function stopSendingAudio() {
         if (webrtcClient.current) {
             webrtcClient.current.stopAudioStream();
-
-            // Send recording state message
-            ws.sendMessage({
-                type: MessageType.RECORDING_STATE,
-                timestamp: new Date().toISOString(),
-                is_recording: false,
-                user_name: null, // Backend will fill in the user name
-            });
         }
     }
 

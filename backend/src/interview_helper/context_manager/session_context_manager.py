@@ -34,6 +34,7 @@ from interview_helper.context_manager.database import (
     add_ai_analysis,
     get_analyses_by_ids,
     get_all_transcripts_since_last_analysis,
+    get_user_by_id,
 )
 from interview_helper.context_manager.span_locator import find_span_in_transcripts
 import logging
@@ -309,17 +310,45 @@ class AppContextManager:
             return cast(T, self.store[(key, session_id)])
 
     async def set_active_audio_session(self, session_id: SessionId):
+        # Get session data while holding the lock
+        session_data = None
         async with self.lock:
             self.active_audio_sessions.add(session_id)
+            session_data = self.session_data.get(session_id)
+
+        # Update recording state outside the lock to avoid deadlock
+        if session_data:
+            # Get user name
+            user = get_user_by_id(self.db, session_data.user)
+            user_name = user.full_name if user else "Unknown User"
+
+            # Update recording state
+            await self.set_recording_state(
+                session_data.project, session_id, user_name, True
+            )
 
     async def clear_active_audio_session(self, session_id: SessionId):
+        # Get session data and event while holding the lock
+        session_data = None
         event = None
 
         async with self.lock:
             self.active_audio_sessions.remove(session_id)
+            session_data = self.session_data.get(session_id)
 
             if session_id in self.cleanup_waiting_event:
                 event = self.cleanup_waiting_event[session_id]
+
+        # Update recording state outside the lock to avoid deadlock
+        if session_data:
+            # Get user name
+            user = get_user_by_id(self.db, session_data.user)
+            user_name = user.full_name if user else "Unknown User"
+
+            # Clear recording state
+            await self.set_recording_state(
+                session_data.project, session_id, user_name, False
+            )
 
         if event is not None:
             event.set()
