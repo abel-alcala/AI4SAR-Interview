@@ -8,7 +8,7 @@ export const MessageType = {
     AI_RESULT: "ai_result",
     CATCHUP: "catchup",
     PROJECT_METADATA: "project_metadata",
-    DISMISS_AI_ANALYSIS: "dismiss_ai_analysis",
+    UPDATE_AI_ANALYSIS_TAG: "update_ai_analysis_tag",
 } as const;
 
 interface OfferMessage {
@@ -61,6 +61,7 @@ export interface AnalysisRow {
     span: string | null;
     transcript_span_id: string | null;
     is_dismissed: boolean;
+    tag: string | null;
     ordinal: number;
 }
 
@@ -78,10 +79,11 @@ export interface ProjectMetadataMessage {
     project_name: string;
 }
 
-export interface DismissAIAnalysis {
-    type: typeof MessageType.DISMISS_AI_ANALYSIS;
+export interface UpdateAIAnalysisTag {
+    type: typeof MessageType.UPDATE_AI_ANALYSIS_TAG;
     timestamp: string;
     analysis_id: string;
+    tag: "starred" | "dismissed" | "starred_dismissed" | null;
 }
 
 export type SignalingMessage =
@@ -96,7 +98,7 @@ export type Message =
     | AIResultMessage
     | CatchupMessage
     | ProjectMetadataMessage
-    | DismissAIAnalysis;
+    | UpdateAIAnalysisTag;
 
 export interface Envelope {
     message: Message;

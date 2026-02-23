@@ -380,6 +380,7 @@ class AnalysisRow(BaseModel):
     span: str | None
     transcript_span_id: TranscriptId | None
     is_dismissed: bool
+    tag: str | None
     transcript_context_start: TranscriptId
     transcript_context_end: TranscriptId
     summary: str
@@ -391,8 +392,6 @@ def get_all_ai_analyses(
 ) -> list[AnalysisRow]:
     """
     Gets all AI analysis results for a project, sorted by creation date (ascending)
-
-    Also joins with DismissedAIAnalysis to add dismissed status and computes ordinal number.
     """
     with db.begin() as conn:
         # Subquery to compute row numbers
@@ -405,6 +404,7 @@ def get_all_ai_analyses(
                 models.AIAnalysis.transcript_context_start,
                 models.AIAnalysis.transcript_context_end,
                 models.AIAnalysis.summary,
+                models.AIAnalysis.tag,
                 sa.func.row_number()
                 .over(order_by=models.AIAnalysis.analysis_id.asc())
                 .label("ordinal"),
@@ -420,17 +420,9 @@ def get_all_ai_analyses(
                 subq.c.transcript_context_start,
                 subq.c.transcript_context_end,
                 subq.c.summary,
+                subq.c.tag,
                 subq.c.ordinal,
-                sa.case(
-                    (models.DismissedAIAnalysis.analysis_id.isnot(None), True),
-                    else_=False,
-                ).label("is_dismissed"),
-            )
-            .outerjoin(
-                models.DismissedAIAnalysis,
-                subq.c.analysis_id == models.DismissedAIAnalysis.analysis_id,
-            )
-            .order_by(subq.c.analysis_id.asc())
+            ).order_by(subq.c.analysis_id.asc())
         ).all()
 
     return [
@@ -441,7 +433,8 @@ def get_all_ai_analyses(
             transcript_span_id=TranscriptId.from_str(row.transcript_span_id)  # pyright: ignore[reportAny]
             if row.transcript_span_id  # pyright: ignore[reportAny]
             else None,
-            is_dismissed=row.is_dismissed,  # pyright: ignore[reportAny]
+            is_dismissed=row.tag == "dismissed" if row.tag else False,  # pyright: ignore[reportAny]
+            tag=row.tag,  # pyright: ignore[reportAny]
             transcript_context_start=TranscriptId.from_str(
                 row.transcript_context_start  # pyright: ignore[reportAny]
             ),
@@ -476,6 +469,7 @@ def get_analyses_by_ids(
                 models.AIAnalysis.transcript_context_start,
                 models.AIAnalysis.transcript_context_end,
                 models.AIAnalysis.summary,
+                models.AIAnalysis.tag,
                 sa.func.row_number()
                 .over(order_by=models.AIAnalysis.analysis_id.asc())
                 .label("ordinal"),
@@ -491,15 +485,8 @@ def get_analyses_by_ids(
                 subq.c.transcript_context_start,
                 subq.c.transcript_context_end,
                 subq.c.summary,
+                subq.c.tag,
                 subq.c.ordinal,
-                sa.case(
-                    (models.DismissedAIAnalysis.analysis_id.isnot(None), True),
-                    else_=False,
-                ).label("is_dismissed"),
-            )
-            .outerjoin(
-                models.DismissedAIAnalysis,
-                subq.c.analysis_id == models.DismissedAIAnalysis.analysis_id,
             )
             .where(subq.c.analysis_id.in_(analysis_id_strs))
             .order_by(subq.c.analysis_id.asc())
@@ -511,7 +498,8 @@ def get_analyses_by_ids(
             analysis_id=row.analysis_id,  # pyright: ignore[reportAny]
             text=row.text,  # pyright: ignore[reportAny]
             span=row.span,  # pyright: ignore[reportAny]
-            is_dismissed=row.is_dismissed,  # pyright: ignore[reportAny]
+            is_dismissed=row.tag == "dismissed" if row.tag else False,  # pyright: ignore[reportAny]
+            tag=row.tag,  # pyright: ignore[reportAny]
             transcript_context_start=TranscriptId.from_str(
                 row.transcript_context_start  # pyright: ignore[reportAny]
             ),
@@ -531,19 +519,22 @@ def get_analyses_by_ids(
     ]
 
 
-def dismiss_ai_analysis(db: PersistentDatabase, analysis_id: str, user_id: UserId):
+def update_ai_analysis_tag(
+    db: PersistentDatabase, analysis_id: str, tag: str | None, _user_id: UserId
+):
     """
-    A user dismisses an AI analysis
+    Update the tag for an AI analysis.
+
+    Args:
+        analysis_id: The ID of the analysis to update
+        tag: The new tag value ("starred", "dismissed", "starred_dismissed", or None to clear)
+        _user_id: User ID (kept for API compatibility, not used as tags are project-wide)
     """
-    dismissed_analysis_id = str(ULID()).lower()
     with db.begin() as conn:
         _ = conn.execute(
-            sa.insert(models.DismissedAIAnalysis),
-            {
-                "dismissed_analysis_id": dismissed_analysis_id,
-                "user_id": str(user_id),
-                "analysis_id": analysis_id,
-            },
+            sa.update(models.AIAnalysis)
+            .where(models.AIAnalysis.analysis_id == analysis_id)
+            .values(tag=tag, time_tag_changed=sa.func.now())
         )
 
 

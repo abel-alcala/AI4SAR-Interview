@@ -1,6 +1,8 @@
 import {
     ActionIcon,
+    Badge,
     Box,
+    Divider,
     Group,
     Paper,
     ScrollArea,
@@ -8,35 +10,48 @@ import {
     Tabs,
     Text,
     Title,
+    Tooltip,
 } from "@mantine/core";
-import { IconAlertTriangle, IconBulb, IconX } from "@tabler/icons-react";
+import {
+    IconArrowBackUp,
+    IconBulb,
+    IconStar,
+    IconStarFilled,
+    IconX,
+} from "@tabler/icons-react";
+import { Fragment } from "react";
 import type { AnalysisRow } from "../../lib/message";
 
 interface InsightsPanelProps {
     insights: AnalysisRow[];
+    onStar: (analysisId: string) => void;
+    onUnstar: (analysisId: string) => void;
     onDismiss: (analysisId: string) => void;
+    onUndoDismiss: (analysisId: string) => void;
     onSpanClick?: (transcriptId: string, spanText: string) => void;
 }
 
 export function InsightsPanel({
     insights,
+    onStar,
+    onUnstar,
     onDismiss,
+    onUndoDismiss,
     onSpanClick,
 }: InsightsPanelProps) {
-    const activeInsights = insights.filter((a) => !a.is_dismissed);
-    const dismissedInsights = insights.filter((a) => a.is_dismissed);
+    const activeInsights = insights.filter(
+        (a) =>
+            a.tag !== "starred" &&
+            a.tag !== "dismissed" &&
+            a.tag !== "starred_dismissed",
+    );
+    const starredInsights = insights.filter((a) => a.tag === "starred");
+    const dismissedInsights = insights.filter(
+        (a) => a.tag === "dismissed" || a.tag === "starred_dismissed",
+    );
 
-    const renderInsight = (
-        analysis: AnalysisRow,
-        showDismissButton: boolean,
-    ) => (
-        <Group
-            key={analysis.analysis_id}
-            gap="xs"
-            align="flex-start"
-            style={{ paddingRight: 8 }}
-        >
-            <IconAlertTriangle size={14} style={{ marginTop: 2 }} />
+    const renderActiveInsight = (analysis: AnalysisRow) => (
+        <Group key={analysis.analysis_id} gap="xs" align="flex-start">
             <Stack gap={4} style={{ flex: 1 }}>
                 <Text size="sm">
                     <Text component="span" size="xs" c="dimmed" fw={600}>
@@ -76,17 +91,161 @@ export function InsightsPanel({
                     </Text>
                 )}
             </Stack>
-            {showDismissButton && (
+            <Group gap={4}>
+                <Tooltip label="Star this question">
+                    <ActionIcon
+                        size="sm"
+                        variant="subtle"
+                        color="yellow"
+                        onClick={() => onStar(analysis.analysis_id)}
+                        aria-label="Star question"
+                    >
+                        <IconStar size={14} />
+                    </ActionIcon>
+                </Tooltip>
+                <Tooltip label="Dismiss question">
+                    <ActionIcon
+                        size="sm"
+                        variant="subtle"
+                        color="gray"
+                        onClick={() => onDismiss(analysis.analysis_id)}
+                        aria-label="Dismiss question"
+                    >
+                        <IconX size={14} />
+                    </ActionIcon>
+                </Tooltip>
+            </Group>
+        </Group>
+    );
+
+    const renderStarredInsight = (analysis: AnalysisRow) => (
+        <Group key={analysis.analysis_id} gap="xs" align="flex-start">
+            <Stack gap={4} style={{ flex: 1 }}>
+                <Text size="sm">
+                    <Text component="span" size="xs" c="dimmed" fw={600}>
+                        Q{analysis.ordinal}{" "}
+                    </Text>
+                    {analysis.text}
+                </Text>
+                {analysis.span && (
+                    <Text
+                        size="xs"
+                        c="dimmed"
+                        fs="italic"
+                        style={{
+                            cursor:
+                                analysis.transcript_span_id && onSpanClick
+                                    ? "pointer"
+                                    : "default",
+                            textDecoration:
+                                analysis.transcript_span_id && onSpanClick
+                                    ? "underline"
+                                    : "none",
+                        }}
+                        onClick={() => {
+                            if (
+                                analysis.transcript_span_id &&
+                                onSpanClick &&
+                                analysis.span
+                            ) {
+                                onSpanClick(
+                                    analysis.transcript_span_id,
+                                    analysis.span,
+                                );
+                            }
+                        }}
+                    >
+                        "{analysis.span}"
+                    </Text>
+                )}
+            </Stack>
+            <Group gap={4}>
+                <Tooltip label="Remove star">
+                    <ActionIcon
+                        size="sm"
+                        variant="subtle"
+                        color="yellow"
+                        onClick={() => onUnstar(analysis.analysis_id)}
+                        aria-label="Unstar question"
+                    >
+                        <IconStarFilled size={14} />
+                    </ActionIcon>
+                </Tooltip>
+                <Tooltip label="Dismiss question">
+                    <ActionIcon
+                        size="sm"
+                        variant="subtle"
+                        color="gray"
+                        onClick={() => onDismiss(analysis.analysis_id)}
+                        aria-label="Dismiss question"
+                    >
+                        <IconX size={14} />
+                    </ActionIcon>
+                </Tooltip>
+            </Group>
+        </Group>
+    );
+
+    const renderDismissedInsight = (analysis: AnalysisRow) => (
+        <Group key={analysis.analysis_id} gap="xs" align="flex-start">
+            <Stack gap={4} style={{ flex: 1 }}>
+                <Group gap={4}>
+                    {analysis.tag === "starred_dismissed" && (
+                        <IconStarFilled
+                            size={14}
+                            color="var(--mantine-color-yellow-6)"
+                        />
+                    )}
+                    <Text size="sm" c="dimmed">
+                        <Text component="span" size="xs" fw={600}>
+                            Q{analysis.ordinal}{" "}
+                        </Text>
+                        {analysis.text}
+                    </Text>
+                </Group>
+                {analysis.span && (
+                    <Text
+                        size="xs"
+                        c="dimmed"
+                        fs="italic"
+                        style={{
+                            cursor:
+                                analysis.transcript_span_id && onSpanClick
+                                    ? "pointer"
+                                    : "default",
+                            textDecoration:
+                                analysis.transcript_span_id && onSpanClick
+                                    ? "underline"
+                                    : "none",
+                        }}
+                        onClick={() => {
+                            if (
+                                analysis.transcript_span_id &&
+                                onSpanClick &&
+                                analysis.span
+                            ) {
+                                onSpanClick(
+                                    analysis.transcript_span_id,
+                                    analysis.span,
+                                );
+                            }
+                        }}
+                    >
+                        "{analysis.span}"
+                    </Text>
+                )}
+            </Stack>
+            <Tooltip label="Restore question">
                 <ActionIcon
                     size="sm"
                     variant="subtle"
                     color="gray"
-                    onClick={() => onDismiss(analysis.analysis_id)}
-                    aria-label="Dismiss insight"
+                    onClick={() => onUndoDismiss(analysis.analysis_id)}
+                    aria-label="Restore question"
                 >
-                    <IconX size={14} />
+                    <IconArrowBackUp size={14} />
                 </ActionIcon>
-            )}
+            </Tooltip>
         </Group>
     );
 
@@ -118,7 +277,35 @@ export function InsightsPanel({
                 }}
             >
                 <Tabs.List>
-                    <Tabs.Tab value="active">Active</Tabs.Tab>
+                    <Tabs.Tab value="active">
+                        <Group gap={4}>
+                            Active
+                            {activeInsights.length > 0 && (
+                                <Badge
+                                    size="sm"
+                                    circle
+                                    style={{ minWidth: 20 }}
+                                >
+                                    {activeInsights.length}
+                                </Badge>
+                            )}
+                        </Group>
+                    </Tabs.Tab>
+                    <Tabs.Tab value="starred">
+                        <Group gap={4}>
+                            <IconStarFilled size={14} />
+                            Starred
+                            {starredInsights.length > 0 && (
+                                <Badge
+                                    size="sm"
+                                    circle
+                                    style={{ minWidth: 20 }}
+                                >
+                                    {starredInsights.length}
+                                </Badge>
+                            )}
+                        </Group>
+                    </Tabs.Tab>
                     <Tabs.Tab value="dismissed">Dismissed</Tabs.Tab>
                 </Tabs.List>
 
@@ -138,9 +325,47 @@ export function InsightsPanel({
                                 ) : (
                                     activeInsights
                                         .reverse()
-                                        .map((analysis) =>
-                                            renderInsight(analysis, true),
-                                        )
+                                        .map((analysis, index) => (
+                                            <Fragment
+                                                key={analysis.analysis_id}
+                                            >
+                                                {renderActiveInsight(analysis)}
+                                                {index <
+                                                    activeInsights.length -
+                                                        1 && <Divider />}
+                                            </Fragment>
+                                        ))
+                                )}
+                            </Stack>
+                        </Box>
+                    </ScrollArea>
+                </Tabs.Panel>
+
+                <Tabs.Panel
+                    value="starred"
+                    pt="md"
+                    style={{ flex: 1, overflow: "hidden" }}
+                >
+                    <ScrollArea h="100%" type="auto">
+                        <Box pb="120px">
+                            <Stack gap="xs">
+                                {starredInsights.length === 0 ? (
+                                    <Text c="dimmed" size="sm">
+                                        No starred questions.
+                                    </Text>
+                                ) : (
+                                    starredInsights
+                                        .reverse()
+                                        .map((analysis, index) => (
+                                            <Fragment
+                                                key={analysis.analysis_id}
+                                            >
+                                                {renderStarredInsight(analysis)}
+                                                {index <
+                                                    starredInsights.length -
+                                                        1 && <Divider />}
+                                            </Fragment>
+                                        ))
                                 )}
                             </Stack>
                         </Box>
@@ -162,9 +387,18 @@ export function InsightsPanel({
                                 ) : (
                                     dismissedInsights
                                         .reverse()
-                                        .map((analysis) =>
-                                            renderInsight(analysis, false),
-                                        )
+                                        .map((analysis, index) => (
+                                            <Fragment
+                                                key={analysis.analysis_id}
+                                            >
+                                                {renderDismissedInsight(
+                                                    analysis,
+                                                )}
+                                                {index <
+                                                    dismissedInsights.length -
+                                                        1 && <Divider />}
+                                            </Fragment>
+                                        ))
                                 )}
                             </Stack>
                         </Box>

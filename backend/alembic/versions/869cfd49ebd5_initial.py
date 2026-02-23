@@ -94,12 +94,19 @@ def upgrade() -> None:
         sa.Column("project_id", sa.String(length=26), nullable=False),
         sa.Column("text", sa.Text(), nullable=False),
         sa.Column("span", sa.Text(), nullable=True),
+        sa.Column("transcript_span_id", sa.String(length=26), nullable=True),
         sa.Column("transcript_context_start", sa.String(length=26), nullable=False),
         sa.Column("transcript_context_end", sa.String(length=26), nullable=False),
         sa.Column("summary", sa.Text(), nullable=False),
+        sa.Column("tag", sa.String(length=50), nullable=True),
+        sa.Column("time_tag_changed", sa.DateTime(), nullable=True),
         sa.ForeignKeyConstraint(
             ["project_id"],
             ["project.project_id"],
+        ),
+        sa.ForeignKeyConstraint(
+            ["transcript_span_id"],
+            ["transcriptions.transcription_id"],
         ),
         sa.ForeignKeyConstraint(
             ["transcript_context_start"],
@@ -110,27 +117,6 @@ def upgrade() -> None:
             ["transcriptions.transcription_id"],
         ),
         sa.PrimaryKeyConstraint("analysis_id"),
-    )
-    _ = op.create_table(
-        "dismissed_ai_analyses",
-        sa.Column("dismissed_analysis_id", sa.String(length=26), nullable=False),
-        sa.Column("analysis_id", sa.String(length=26), nullable=False),
-        sa.Column("user_id", sa.String(length=26), nullable=False),
-        sa.Column(
-            "created_at",
-            sa.DateTime(),
-            server_default=sa.text("(CURRENT_TIMESTAMP)"),
-            nullable=False,
-        ),
-        sa.ForeignKeyConstraint(
-            ["analysis_id"],
-            ["ai_analyses.analysis_id"],
-        ),
-        sa.ForeignKeyConstraint(
-            ["user_id"],
-            ["users.user_id"],
-        ),
-        sa.PrimaryKeyConstraint("dismissed_analysis_id"),
     )
 
     # ==========================
@@ -270,7 +256,6 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     """Downgrade schema."""
-    op.drop_table("dismissed_ai_analyses")
     op.drop_table("transcriptions")
     op.drop_table("ai_analyses")
     op.drop_table("project")
