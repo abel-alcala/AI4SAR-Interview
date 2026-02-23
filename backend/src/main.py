@@ -14,6 +14,7 @@ from interview_helper.context_manager.messages import (
     CatchupMessage,
     ProjectMetadataMessage,
     TranscriptChunkToSend,
+    RecordingStateMessage,
 )
 from starlette.responses import RedirectResponse
 from interview_helper.security.http import (
@@ -363,6 +364,20 @@ async def websocket_endpoint(
                     project_name=project["name"],
                 )
                 await cws.send_message(metadata_msg)
+
+                # Send current recording state if someone is recording
+                recording_state = await session_manager.get_recording_state(
+                    project_id_typed
+                )
+                if recording_state:
+                    recording_session_id, recording_user_name = recording_state
+                    # Only send if it's not this session recording
+                    if recording_session_id != context.session_id:
+                        recording_state_msg = RecordingStateMessage(
+                            is_recording=True,
+                            user_name=recording_user_name,
+                        )
+                        await cws.send_message(recording_state_msg)
 
                 try:
                     while True:

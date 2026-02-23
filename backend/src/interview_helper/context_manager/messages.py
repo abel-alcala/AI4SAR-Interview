@@ -72,6 +72,13 @@ class UpdateAIAnalysisTag(BaseModel):
     tag: Literal["starred", "dismissed", "starred_dismissed"] | None
 
 
+class RecordingStateMessage(BaseModel):
+    type: Literal["recording_state"] = "recording_state"
+    timestamp: datetime = Field(default_factory=datetime.now)
+    is_recording: bool
+    user_name: str | None = None
+
+
 WebSocketMessage = (
     ErrorMessage
     | TranscriptionMessage
@@ -81,6 +88,7 @@ WebSocketMessage = (
     | CatchupMessage
     | ProjectMetadataMessage
     | UpdateAIAnalysisTag
+    | RecordingStateMessage
 )
 
 

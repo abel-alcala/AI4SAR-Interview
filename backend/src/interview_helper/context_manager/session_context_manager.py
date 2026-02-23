@@ -1,6 +1,10 @@
 from collections.abc import Sequence
 from langchain_core.callbacks import BaseCallbackHandler
-from interview_helper.context_manager.messages import AIResultMessage, WebSocketMessage
+from interview_helper.context_manager.messages import (
+    AIResultMessage,
+    WebSocketMessage,
+    RecordingStateMessage,
+)
 from interview_helper.context_manager.resource_keys import WEBSOCKET
 from interview_helper.context_manager.types import AIResult, TranscriptId
 from interview_helper.context_manager.types import AIJob
@@ -30,6 +34,7 @@ from interview_helper.context_manager.database import (
     add_ai_analysis,
     get_analyses_by_ids,
     get_all_transcripts_since_last_analysis,
+    get_user_by_id,
 )
 from interview_helper.context_manager.span_locator import find_span_in_transcripts
 import logging
@@ -162,6 +167,9 @@ class AppContextManager:
         )
 
         self.active_ai_analysis: dict[ProjectId, anyio.Lock] = defaultdict(anyio.Lock)
+
+        # Track which session is recording for each project (session_id, user_name)
+        self.recording_state: dict[ProjectId, tuple[SessionId, str]] = {}
 
         # Static for duration of this context, doesn't require lock.
         self.audio_ingest_consumers = audio_ingest_consumers
@@ -302,17 +310,45 @@ class AppContextManager:
             return cast(T, self.store[(key, session_id)])
 
     async def set_active_audio_session(self, session_id: SessionId):
+        # Get session data while holding the lock
+        session_data = None
         async with self.lock:
             self.active_audio_sessions.add(session_id)
+            session_data = self.session_data.get(session_id)
+
+        # Update recording state outside the lock to avoid deadlock
+        if session_data:
+            # Get user name
+            user = get_user_by_id(self.db, session_data.user)
+            user_name = user.full_name if user else "Unknown User"
+
+            # Update recording state
+            await self.set_recording_state(
+                session_data.project, session_id, user_name, True
+            )
 
     async def clear_active_audio_session(self, session_id: SessionId):
+        # Get session data and event while holding the lock
+        session_data = None
         event = None
 
         async with self.lock:
             self.active_audio_sessions.remove(session_id)
+            session_data = self.session_data.get(session_id)
 
             if session_id in self.cleanup_waiting_event:
                 event = self.cleanup_waiting_event[session_id]
+
+        # Update recording state outside the lock to avoid deadlock
+        if session_data:
+            # Get user name
+            user = get_user_by_id(self.db, session_data.user)
+            user_name = user.full_name if user else "Unknown User"
+
+            # Clear recording state
+            await self.set_recording_state(
+                session_data.project, session_id, user_name, False
+            )
 
         if event is not None:
             event.set()
@@ -402,6 +438,43 @@ class AppContextManager:
                     await ws.send_message(message)
                 except Exception as e:
                     logger.error(f"Error broadcasting to session {session_id}: {e}")
+
+    async def set_recording_state(
+        self,
+        project_id: ProjectId,
+        session_id: SessionId,
+        user_name: str,
+        is_recording: bool,
+    ):
+        """
+        Set the recording state for a project and broadcast to all sessions
+        """
+
+        async with self.lock:
+            if is_recording:
+                self.recording_state[project_id] = (session_id, user_name)
+            else:
+                # Only clear if this session is the one recording
+                if project_id in self.recording_state:
+                    current_session_id, _ = self.recording_state[project_id]
+                    if current_session_id == session_id:
+                        del self.recording_state[project_id]
+
+        # Broadcast the state change to all sessions in this project
+        message = RecordingStateMessage(
+            is_recording=is_recording,
+            user_name=user_name if is_recording else None,
+        )
+        await self.broadcast_to_project(project_id, message)
+
+    async def get_recording_state(
+        self, project_id: ProjectId
+    ) -> tuple[SessionId, str] | None:
+        """
+        Get the current recording state for a project
+        """
+        async with self.lock:
+            return self.recording_state.get(project_id)
 
     async def _submit_ai_processing_job(self, job: AIJob):
         assert self._workers_started
