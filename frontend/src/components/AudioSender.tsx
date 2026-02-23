@@ -128,25 +128,22 @@ export function AudioSender() {
     // Handle dismissing an insight
     const handleDismissInsight = useCallback(
         (analysisId: string) => {
+            // Send update tag message to backend
+            const insight = insights.find((i) => i.analysis_id === analysisId);
+            const newTag =
+                insight?.tag === "starred" ? "starred_dismissed" : "dismissed";
+
             // Update local state immediately
             setInsights((prevState) =>
                 prevState.map((insight) => {
                     if (insight.analysis_id === analysisId) {
                         // If it's starred, mark as starred_dismissed, otherwise just dismissed
-                        const newTag =
-                            insight.tag === "starred"
-                                ? "starred_dismissed"
-                                : "dismissed";
                         return { ...insight, tag: newTag };
                     }
                     return insight;
                 }),
             );
 
-            // Send update tag message to backend
-            const insight = insights.find((i) => i.analysis_id === analysisId);
-            const newTag =
-                insight?.tag === "starred" ? "starred_dismissed" : "dismissed";
             ws.sendMessage({
                 type: MessageType.UPDATE_AI_ANALYSIS_TAG,
                 timestamp: new Date().toISOString(),
