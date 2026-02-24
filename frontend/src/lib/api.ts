@@ -81,7 +81,7 @@ export async function downloadTranscript(
     a.href = url;
     a.download =
         response.headers
-            .get("Content-Disposition")
+            .get("content-disposition")
             ?.split("filename=")[1]
             ?.replace(/"/g, "") || "transcript.txt";
     document.body.appendChild(a);
@@ -118,7 +118,7 @@ export async function downloadQuestions(
     a.href = url;
     a.download =
         response.headers
-            .get("Content-Disposition")
+            .get("content-disposition")
             ?.split("filename=")[1]
             ?.replace(/"/g, "") || "questions.txt";
     document.body.appendChild(a);
@@ -155,7 +155,7 @@ export async function downloadAudio(
     a.href = url;
     a.download =
         response.headers
-            .get("Content-Disposition")
+            .get("content-disposition")
             ?.split("filename=")[1]
             ?.replace(/"/g, "") || "audio.wav";
     document.body.appendChild(a);

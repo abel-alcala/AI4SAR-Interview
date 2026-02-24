@@ -2,6 +2,7 @@
 from contextlib import asynccontextmanager
 
 from anyio.from_thread import BlockingPortal
+from interview_helper.downloads.util import sanitize_filename
 from interview_helper.ai_analysis.ai_analysis import SimpleAnalyzer
 from starlette.websockets import WebSocketDisconnect
 from interview_helper.audio_stream_handler.transcription.transcription import (
@@ -16,7 +17,6 @@ from interview_helper.context_manager.messages import (
     TranscriptChunkToSend,
     RecordingStateMessage,
 )
-from starlette.responses import RedirectResponse, StreamingResponse
 from interview_helper.security.http import (
     verify_jwt_token,
     get_user_info_from_oidc_provider,
@@ -60,7 +60,7 @@ from interview_helper.context_manager.types import ProjectId
 from fastapi.security import OpenIdConnect
 from fastapi import FastAPI, WebSocket, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response
+from fastapi.responses import FileResponse, Response, RedirectResponse
 import uvicorn
 from pathlib import Path
 import wave
@@ -127,6 +127,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["Content-Disposition"],
 )
 
 # OIDC Configuration - configured via environment variables
@@ -481,12 +482,12 @@ async def download_transcript(
         )
 
     project_name = project["name"] or "transcript"
-    filename = f"{project_name.replace(' ', '_')}_transcript.txt"
+    safe_filename = sanitize_filename(project_name, "transcript") + "_transcript.txt"
 
     return Response(
         content=transcript_text,
         media_type="text/plain",
-        headers={"Content-Disposition": f"attachment; filename={filename}"},
+        headers={"Content-Disposition": f'attachment; filename="{safe_filename}"'},
     )
 
 
@@ -510,7 +511,7 @@ async def download_questions(
     analyses = get_all_ai_analyses(session_manager.db, project_id_typed)
 
     project_name = project["name"] or "questions"
-    filename = f"{project_name.replace(' ', '_')}_questions.txt"
+    safe_filename = sanitize_filename(project_name, "questions") + "_questions.txt"
 
     if not analyses:
         raise HTTPException(
@@ -542,7 +543,7 @@ async def download_questions(
     return Response(
         content=questions_text,
         media_type="text/plain",
-        headers={"Content-Disposition": f"attachment; filename={filename}"},
+        headers={"Content-Disposition": f'attachment; filename="{safe_filename}"'},
     )
 
 
@@ -589,7 +590,7 @@ async def download_audio(project_id: str, token: Annotated[str, Depends(oidc_sch
         )
 
     project_name = project["name"] or "audio"
-    filename = f"{project_name.replace(' ', '_')}_audio.wav"
+    safe_filename = sanitize_filename(project_name, "audio") + "_audio.wav"
 
     # Stitch audio files together in a temporary file to avoid materializing in memory
     temp_file = tempfile.NamedTemporaryFile(mode="w+b", suffix=".wav", delete=False)
@@ -612,27 +613,11 @@ async def download_audio(project_id: str, token: Annotated[str, Depends(oidc_sch
                             input_wave.readframes(input_wave.getnframes())
                         )
 
-        # Stream the temp file back to client
-        async def file_streamer():
-            try:
-                with open(temp_path, "rb") as f:
-                    chunk_size = 64 * 1024  # 64KB chunks
-                    while True:
-                        chunk = f.read(chunk_size)
-                        if not chunk:
-                            break
-                        yield chunk
-            finally:
-                # Clean up temp file after streaming completes
-                try:
-                    temp_path.unlink()
-                except Exception as e:
-                    logger.warning(f"Failed to delete temp file {temp_path}: {e}")
-
-        return StreamingResponse(
-            file_streamer(),
+        return FileResponse(
+            temp_path,
             media_type="audio/wav",
-            headers={"Content-Disposition": f"attachment; filename={filename}"},
+            filename=safe_filename,
+            headers={"Content-Disposition": f'attachment; filename="{safe_filename}"'},
         )
     except Exception as e:
         # Clean up temp file if error occurs before streaming starts

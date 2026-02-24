@@ -141,6 +141,7 @@ export function TranscriptView({
                                         color="gray"
                                         size="lg"
                                         loading={downloading !== null}
+                                        aria-label="Open Download Options"
                                     >
                                         <IconDownload size={18} />
                                     </ActionIcon>
