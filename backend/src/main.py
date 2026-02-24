@@ -55,12 +55,18 @@ from interview_helper.context_manager.database import (
     get_all_transcripts,
     get_all_ai_analyses,
 )
-from interview_helper.context_manager.types import ProjectId
+from interview_helper.context_manager.types import ProjectId, SessionId
 
 from fastapi.security import OpenIdConnect
 from fastapi import FastAPI, WebSocket, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 import uvicorn
+import sqlite3
+from pathlib import Path
+import wave
+import io
+from interview_helper.downloads.get_transcript import generate_transcript
 
 # Configure logging
 logging.basicConfig(
@@ -97,7 +103,7 @@ userinfo_endpoint: str = get_oidc_userinfo_endpoint(
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(_app: FastAPI):
     """background task starts at statrup"""
     await session_manager.start_background_services()
     yield
@@ -444,6 +450,171 @@ async def create_project(
     )
 
     return new_project
+
+
+@app.get("/project/{project_id}/download/transcript")
+async def download_transcript(
+    project_id: str, token: Annotated[str, Depends(oidc_scheme)]
+):
+    """
+    Download the transcript for a project as a text file
+    """
+    clean_token = token.removeprefix("Bearer ")
+    _ = verify_jwt_token(clean_token, jwks_client, CLIENT_ID, signing_algos)
+
+    # Verify project exists
+    project_id_typed = ProjectId.from_str(project_id)
+    project = get_project_by_id(session_manager.db, project_id_typed)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    # Generate transcript
+    transcript_text = generate_transcript(
+        project_id=project_id,
+        db_path="data/database.sqlite3",
+    )
+
+    project_name = project["name"] or "transcript"
+    filename = f"{project_name.replace(' ', '_')}_transcript.txt"
+
+    return Response(
+        content=transcript_text,
+        media_type="text/plain",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
+@app.get("/project/{project_id}/download/questions")
+async def download_questions(
+    project_id: str, token: Annotated[str, Depends(oidc_scheme)]
+):
+    """
+    Download all AI-generated questions for a project as a text file
+    """
+    clean_token = token.removeprefix("Bearer ")
+    _ = verify_jwt_token(clean_token, jwks_client, CLIENT_ID, signing_algos)
+
+    # Verify project exists
+    project_id_typed = ProjectId.from_str(project_id)
+    project = get_project_by_id(session_manager.db, project_id_typed)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    # Get all AI analyses (questions)
+    analyses = get_all_ai_analyses(session_manager.db, project_id_typed)
+
+    project_name = project["name"] or "questions"
+    filename = f"{project_name.replace(' ', '_')}_questions.txt"
+
+    if not analyses:
+        raise HTTPException(
+            status_code=404, detail="No AI-generated questions found for this project"
+        )
+
+    # Format questions as text
+    transcript_lines: list[str] = []
+    transcript_lines.append("=" * 80)
+    transcript_lines.append(f"GENERATED QUESTIONS - {project_name}")
+    transcript_lines.append(f"Project ID: {project_id}")
+    transcript_lines.append(f"Total Questions: {len(analyses)}")
+    transcript_lines.append("=" * 80)
+    transcript_lines.append("")
+
+    for analysis in analyses:
+        transcript_lines.append(f"Question #{analysis.ordinal}:")
+        transcript_lines.append(f"\t{analysis.text}")
+        if analysis.tag:
+            transcript_lines.append(f"\tTag: {analysis.tag}")
+
+        if analysis.span:
+            transcript_lines.append(f'\tContext: "{analysis.span}"')
+
+        transcript_lines.append("")
+
+    questions_text = "\n".join(transcript_lines)
+
+    return Response(
+        content=questions_text,
+        media_type="text/plain",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
+@app.get("/project/{project_id}/download/audio")
+async def download_audio(project_id: str, token: Annotated[str, Depends(oidc_scheme)]):
+    """
+    Download all audio recordings for a project stitched together in chronological order
+    """
+    clean_token = token.removeprefix("Bearer ")
+    _ = verify_jwt_token(clean_token, jwks_client, CLIENT_ID, signing_algos)
+
+    # Verify project exists
+    project_id_typed = ProjectId.from_str(project_id)
+    project = get_project_by_id(session_manager.db, project_id_typed)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    # Get all session IDs for this project from the database
+    conn = sqlite3.connect("data/database.sqlite3")
+    cursor = conn.cursor()
+    cursor = cursor.execute(
+        """
+        SELECT DISTINCT session_id 
+        FROM transcriptions 
+        WHERE project_id = ? 
+        ORDER BY session_id ASC
+        """,
+        (project_id,),
+    )
+    session_ids: list[SessionId] = [row[0] for row in cursor.fetchall()]  # pyright: ignore[reportAny]
+    conn.close()
+
+    if not session_ids:
+        raise HTTPException(
+            status_code=404, detail="No audio recordings found for this project"
+        )
+
+    # Find corresponding audio files
+    audio_dir = Path(session_manager.get_settings().audio_recordings_dir)
+    audio_files: list[Path] = []
+    for session_id in session_ids:
+        audio_file = audio_dir / f"recording-{session_id}.wav"
+        if audio_file.exists():
+            audio_files.append(audio_file)
+
+    if not audio_files:
+        raise HTTPException(
+            status_code=404, detail="No audio files found for this project"
+        )
+
+    # Stitch audio files together
+    output = io.BytesIO()
+
+    # Open first file to get parameters
+    with wave.open(str(audio_files[0]), "rb") as first_wave:
+        params = first_wave.getparams()
+
+        # Create output wave file
+        with wave.open(output, "wb") as output_wave:
+            output_wave.setparams(params)
+
+            # Write all audio files
+            for audio_file in audio_files:
+                with wave.open(str(audio_file), "rb") as input_wave:
+                    output_wave.writeframes(
+                        input_wave.readframes(input_wave.getnframes())
+                    )
+
+    _ = output.seek(0)
+
+    project_name = project["name"] or "audio"
+    filename = f"{project_name.replace(' ', '_')}_audio.wav"
+
+    return Response(
+        content=output.getvalue(),
+        media_type="audio/wav",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
 
 
 if __name__ == "__main__":

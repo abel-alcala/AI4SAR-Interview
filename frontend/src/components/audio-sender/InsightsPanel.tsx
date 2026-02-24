@@ -315,7 +315,7 @@ export function InsightsPanel({
                     style={{ flex: 1, overflow: "hidden" }}
                 >
                     <ScrollArea h="100%" type="auto">
-                        <Box pb="120px">
+                        <Box pb="120px" pr="md">
                             <Stack gap="xs">
                                 {activeInsights.length === 0 ? (
                                     <Text c="dimmed" size="sm">
@@ -347,7 +347,7 @@ export function InsightsPanel({
                     style={{ flex: 1, overflow: "hidden" }}
                 >
                     <ScrollArea h="100%" type="auto">
-                        <Box pb="120px">
+                        <Box pb="120px" pr="md">
                             <Stack gap="xs">
                                 {starredInsights.length === 0 ? (
                                     <Text c="dimmed" size="sm">
@@ -378,7 +378,7 @@ export function InsightsPanel({
                     style={{ flex: 1, overflow: "hidden" }}
                 >
                     <ScrollArea h="100%" type="auto">
-                        <Box pb="120px">
+                        <Box pb="120px" pr="md">
                             <Stack gap="xs">
                                 {dismissedInsights.length === 0 ? (
                                     <Text c="dimmed" size="sm">

@@ -20,6 +20,7 @@ interface TranscriptSectionType {
 interface MobileLayoutProps {
     transcript: TranscriptSectionType[];
     insights: AnalysisRow[];
+    projectId?: string;
     projectName: string | null;
     connectionState: "disconnected" | "connected" | "connecting" | "failed";
     statusText: string;
@@ -47,6 +48,7 @@ interface MobileLayoutProps {
 export function MobileLayout({
     transcript,
     insights,
+    projectId,
     projectName,
     connectionState,
     statusText,
@@ -136,6 +138,7 @@ export function MobileLayout({
                         <Stack gap="xs" style={{ height: "100%" }}>
                             <TranscriptView
                                 transcript={transcript}
+                                projectId={projectId}
                                 projectName={projectName}
                                 isConnected={isConnected}
                                 statusText={statusText}

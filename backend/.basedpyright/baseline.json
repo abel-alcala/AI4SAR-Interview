@@ -804,14 +804,6 @@
         ],
         "./src/main.py": [
             {
-                "code": "reportUnusedParameter",
-                "range": {
-                    "startColumn": 19,
-                    "endColumn": 22,
-                    "lineCount": 1
-                }
-            },
-            {
                 "code": "reportAny",
                 "range": {
                     "startColumn": 0,

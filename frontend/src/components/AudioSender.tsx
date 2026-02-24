@@ -29,7 +29,11 @@ interface TranscriptChunkWithId {
     text: string;
 }
 
-export function AudioSender() {
+interface AudioSenderProps {
+    projectId?: string;
+}
+
+export function AudioSender({ projectId }: AudioSenderProps) {
     type validConnectionStates =
         | "disconnected"
         | "connected"
@@ -626,6 +630,7 @@ export function AudioSender() {
                     <MobileLayout
                         transcript={transcript}
                         insights={insights}
+                        projectId={projectId}
                         projectName={projectName}
                         connectionState={connectionState}
                         statusText={statusText}
@@ -652,6 +657,7 @@ export function AudioSender() {
                     <DesktopLayout
                         transcript={transcript}
                         insights={insights}
+                        projectId={projectId}
                         projectName={projectName}
                         connectionState={connectionState}
                         statusText={statusText}
