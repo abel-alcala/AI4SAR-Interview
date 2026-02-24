@@ -1,62 +1,35 @@
 from datetime import datetime
-import sqlite3
-from typing import cast
+
+from interview_helper.context_manager.database import (
+    PersistentDatabase,
+    get_all_transcriptions_for_project,
+)
+from interview_helper.context_manager.types import ProjectId
 from .util import extract_timestamp_from_ulid
 
 
 def generate_transcript(
     project_id: str,
-    db_path: str,
-) -> str:
+    db: PersistentDatabase,
+) -> str | None:
     """
     Generate a formatted transcript for a given project.
 
     Args:
         project_id: The project ID to generate transcript for
-        db_path: Path to the SQLite database
-        output_file: Optional path to save the transcript file
+        db: The persistent database instance
 
     Returns:
         The formatted transcript as a string
     """
 
-    # Connect to the database
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
-
-    # Fetch all transcriptions for the project, ordered by transcription_id (ULID)
-    # Since ULID is chronologically sortable, sorting by transcription_id gives us time order
-    query = """
-        SELECT 
-            transcription_id,
-            speaker,
-            text_output,
-            created_at,
-            session_id,
-            user_id
-        FROM transcriptions
-        WHERE project_id = ?
-        ORDER BY transcription_id ASC
-    """
-
-    _ = cursor.execute(query, (project_id,))
-    rows = cursor.fetchall()
+    # Fetch all transcriptions for the project with project details
+    rows = get_all_transcriptions_for_project(db, ProjectId.from_str(project_id))
 
     if not rows:
-        conn.close()
-        return f"No transcriptions found for project: {project_id}"
+        return None
 
-    # Get project name
-    _ = cursor.execute("SELECT name FROM project WHERE project_id = ?", (project_id,))
-    project_row = cursor.fetchone()  # pyright: ignore[reportAny]
-    project_name: str = (
-        cast(str, project_row["name"])
-        if project_row and project_row["name"]
-        else "Untitled Project"
-    )
-
-    conn.close()
+    project_name = rows[0]["project_name"]
 
     # Build the transcript
     transcript_lines: list[str] = []
@@ -72,8 +45,8 @@ def generate_transcript(
     current_texts: list[str] = []
     current_timestamp: datetime | None = None
 
-    for row in rows:  # pyright: ignore[reportAny]
-        transcription_id = cast(str, row["transcription_id"])
+    for row in rows:
+        transcription_id = row["transcription_id"]
         speaker = row["speaker"] or "Unknown Speaker"
         text = row["text_output"] or ""
 

@@ -16,7 +16,7 @@ from interview_helper.context_manager.messages import (
     TranscriptChunkToSend,
     RecordingStateMessage,
 )
-from starlette.responses import RedirectResponse
+from starlette.responses import RedirectResponse, StreamingResponse
 from interview_helper.security.http import (
     verify_jwt_token,
     get_user_info_from_oidc_provider,
@@ -55,18 +55,19 @@ from interview_helper.context_manager.database import (
     get_all_transcripts,
     get_all_ai_analyses,
 )
-from interview_helper.context_manager.types import ProjectId, SessionId
+from interview_helper.context_manager.types import ProjectId
 
 from fastapi.security import OpenIdConnect
 from fastapi import FastAPI, WebSocket, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 import uvicorn
-import sqlite3
 from pathlib import Path
 import wave
-import io
+import tempfile
+import sqlalchemy as sa
 from interview_helper.downloads.get_transcript import generate_transcript
+from interview_helper.context_manager import models
 
 # Configure logging
 logging.basicConfig(
@@ -471,8 +472,13 @@ async def download_transcript(
     # Generate transcript
     transcript_text = generate_transcript(
         project_id=project_id,
-        db_path="data/database.sqlite3",
+        db=session_manager.db,
     )
+
+    if transcript_text is None:
+        raise HTTPException(
+            status_code=404, detail="No transcriptions found for this project"
+        )
 
     project_name = project["name"] or "transcript"
     filename = f"{project_name.replace(' ', '_')}_transcript.txt"
@@ -555,19 +561,14 @@ async def download_audio(project_id: str, token: Annotated[str, Depends(oidc_sch
         raise HTTPException(status_code=404, detail="Project not found")
 
     # Get all session IDs for this project from the database
-    conn = sqlite3.connect("data/database.sqlite3")
-    cursor = conn.cursor()
-    cursor = cursor.execute(
-        """
-        SELECT DISTINCT session_id 
-        FROM transcriptions 
-        WHERE project_id = ? 
-        ORDER BY session_id ASC
-        """,
-        (project_id,),
-    )
-    session_ids: list[SessionId] = [row[0] for row in cursor.fetchall()]  # pyright: ignore[reportAny]
-    conn.close()
+    with session_manager.db.begin() as conn:
+        session_ids_result = conn.execute(
+            sa.select(models.Transcription.session_id)
+            .where(models.Transcription.project_id == project_id)
+            .distinct()
+            .order_by(models.Transcription.session_id.asc())
+        ).all()
+        session_ids: list[str] = [row[0] for row in session_ids_result]
 
     if not session_ids:
         raise HTTPException(
@@ -587,34 +588,59 @@ async def download_audio(project_id: str, token: Annotated[str, Depends(oidc_sch
             status_code=404, detail="No audio files found for this project"
         )
 
-    # Stitch audio files together
-    output = io.BytesIO()
-
-    # Open first file to get parameters
-    with wave.open(str(audio_files[0]), "rb") as first_wave:
-        params = first_wave.getparams()
-
-        # Create output wave file
-        with wave.open(output, "wb") as output_wave:
-            output_wave.setparams(params)
-
-            # Write all audio files
-            for audio_file in audio_files:
-                with wave.open(str(audio_file), "rb") as input_wave:
-                    output_wave.writeframes(
-                        input_wave.readframes(input_wave.getnframes())
-                    )
-
-    _ = output.seek(0)
-
     project_name = project["name"] or "audio"
     filename = f"{project_name.replace(' ', '_')}_audio.wav"
 
-    return Response(
-        content=output.getvalue(),
-        media_type="audio/wav",
-        headers={"Content-Disposition": f"attachment; filename={filename}"},
-    )
+    # Stitch audio files together in a temporary file to avoid materializing in memory
+    temp_file = tempfile.NamedTemporaryFile(mode="w+b", suffix=".wav", delete=False)
+    temp_path = Path(temp_file.name)
+    temp_file.close()
+
+    try:
+        # Open first file to get parameters
+        with wave.open(str(audio_files[0]), "rb") as first_wave:
+            params = first_wave.getparams()
+
+            # Create output wave file in temp file
+            with wave.open(str(temp_path), "wb") as output_wave:
+                output_wave.setparams(params)
+
+                # Write all audio files
+                for audio_file in audio_files:
+                    with wave.open(str(audio_file), "rb") as input_wave:
+                        output_wave.writeframes(
+                            input_wave.readframes(input_wave.getnframes())
+                        )
+
+        # Stream the temp file back to client
+        async def file_streamer():
+            try:
+                with open(temp_path, "rb") as f:
+                    chunk_size = 64 * 1024  # 64KB chunks
+                    while True:
+                        chunk = f.read(chunk_size)
+                        if not chunk:
+                            break
+                        yield chunk
+            finally:
+                # Clean up temp file after streaming completes
+                try:
+                    temp_path.unlink()
+                except Exception as e:
+                    logger.warning(f"Failed to delete temp file {temp_path}: {e}")
+
+        return StreamingResponse(
+            file_streamer(),
+            media_type="audio/wav",
+            headers={"Content-Disposition": f"attachment; filename={filename}"},
+        )
+    except Exception as e:
+        # Clean up temp file if error occurs before streaming starts
+        try:
+            temp_path.unlink()
+        except Exception:
+            pass
+        raise e
 
 
 if __name__ == "__main__":

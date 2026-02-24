@@ -1,4 +1,5 @@
 from collections.abc import Sequence
+from datetime import datetime
 from pydantic import BaseModel
 from sqlalchemy.sql.sqltypes import DateTime
 from typing import Literal, TypedDict
@@ -22,7 +23,7 @@ from ulid import ULID
 class PersistentDatabase:
     """A persistent database that is saved to local disk"""
 
-    DATABASE_URL = "sqlite+pysqlite:///data/database.sqlite3"
+    DATABASE_URL: str = "sqlite+pysqlite:///data/database.sqlite3"
 
     def __init__(self, engine: sa.Engine | None = None):
         if engine is None:
@@ -215,6 +216,79 @@ def get_all_transcripts(
     ]
 
     return rows
+
+
+class TranscriptionWithProjectDetails(TypedDict):
+    transcription_id: str
+    speaker: str | None
+    text_output: str
+    created_at: datetime
+    session_id: str
+    user_id: str
+    project_name: str
+
+
+def get_all_transcriptions_for_project(
+    db: PersistentDatabase, project_id: ProjectId
+) -> list[TranscriptionWithProjectDetails]:
+    """
+    Gets all transcriptions for a project with full details including project name,
+    sorted by transcription_id (ULID) which is chronologically sortable.
+
+    Args:
+        db: The persistent database instance
+        project_id: The project ID to get transcriptions for
+
+    Returns:
+        List of transcriptions with all details and project name
+    """
+    with db.begin() as conn:
+        # Fetch all transcriptions for the project
+        rows = conn.execute(
+            sa.select(
+                models.Transcription.transcription_id,
+                models.Transcription.speaker,
+                models.Transcription.text_output,
+                models.Transcription.created_at,
+                models.Transcription.session_id,
+                models.Transcription.user_id,
+            )
+            .where(models.Transcription.project_id == str(project_id))
+            .order_by(models.Transcription.transcription_id.asc())
+        ).all()
+
+        # Get project name
+        project_row = conn.execute(
+            sa.select(models.Project.name).where(
+                models.Project.project_id == str(project_id)
+            )
+        ).first()
+
+        project_name: str = (
+            project_row[0] if project_row and project_row[0] else "Untitled Project"
+        )
+
+    result: list[TranscriptionWithProjectDetails] = [
+        {
+            "transcription_id": transcription_id,
+            "speaker": speaker,
+            "text_output": text_output,
+            "created_at": created_at,
+            "session_id": session_id,
+            "user_id": user_id,
+            "project_name": project_name,
+        }
+        for (
+            transcription_id,  # pyright: ignore[reportAny]
+            speaker,  # pyright: ignore[reportAny]
+            text_output,  # pyright: ignore[reportAny]
+            created_at,  # pyright: ignore[reportAny]
+            session_id,  # pyright: ignore[reportAny]
+            user_id,  # pyright: ignore[reportAny]
+        ) in rows
+    ]
+
+    return result
 
 
 def get_all_transcripts_since_last_analysis(
