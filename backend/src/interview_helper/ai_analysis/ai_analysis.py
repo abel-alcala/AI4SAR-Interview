@@ -234,8 +234,19 @@ class SimpleAnalyzer:
 
             analysis: Analysis = response["structured_response"]  # pyright: ignore[reportAny]
 
+            def clean_grounding_span(span: str) -> str:
+                return (
+                    span.removeprefix('"')
+                    .removesuffix('"')
+                    .removeprefix("'")
+                    .removesuffix("'")
+                )
+
             questions = [
-                AIQuestion(question=q.question, grounding_span=q.grounding_span)
+                AIQuestion(
+                    question=q.question,
+                    grounding_span=clean_grounding_span(q.grounding_span),
+                )
                 for q in analysis.questions
             ]
 

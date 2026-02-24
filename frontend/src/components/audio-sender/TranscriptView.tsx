@@ -9,7 +9,17 @@ import {
     Stack,
     Text,
     Title,
+    Menu,
+    ActionIcon,
 } from "@mantine/core";
+import { IconDownload } from "@tabler/icons-react";
+import { useAuth } from "react-oidc-context";
+import {
+    downloadTranscript,
+    downloadQuestions,
+    downloadAudio,
+} from "../../lib/api";
+import { useState } from "react";
 import { TranscriptSection } from "./TranscriptSection";
 
 interface TranscriptChunkWithId {
@@ -26,6 +36,7 @@ interface TranscriptSectionType {
 
 interface TranscriptViewProps {
     transcript: TranscriptSectionType[];
+    projectId?: string;
     projectName: string | null;
     isConnected: boolean;
     statusText: string;
@@ -45,6 +56,7 @@ interface TranscriptViewProps {
 
 export function TranscriptView({
     transcript,
+    projectId,
     projectName,
     isConnected,
     statusText,
@@ -58,6 +70,45 @@ export function TranscriptView({
     showLiveBadge = true,
     titleOrder = 4,
 }: TranscriptViewProps) {
+    const auth = useAuth();
+    const [downloading, setDownloading] = useState<string | null>(null);
+
+    const handleDownloadTranscript = async () => {
+        if (!projectId || !auth.user?.access_token) return;
+        try {
+            setDownloading("transcript");
+            await downloadTranscript(projectId, auth.user.access_token);
+        } catch (error) {
+            console.error("Failed to download transcript:", error);
+        } finally {
+            setDownloading(null);
+        }
+    };
+
+    const handleDownloadQuestions = async () => {
+        if (!projectId || !auth.user?.access_token) return;
+        try {
+            setDownloading("questions");
+            await downloadQuestions(projectId, auth.user.access_token);
+        } catch (error) {
+            console.error("Failed to download questions:", error);
+        } finally {
+            setDownloading(null);
+        }
+    };
+
+    const handleDownloadAudio = async () => {
+        if (!projectId || !auth.user?.access_token) return;
+        try {
+            setDownloading("audio");
+            await downloadAudio(projectId, auth.user.access_token);
+        } catch (error) {
+            console.error("Failed to download audio:", error);
+        } finally {
+            setDownloading(null);
+        }
+    };
+
     return (
         <Paper withBorder shadow="sm" radius="lg" style={{ height: "100%" }}>
             <Stack gap="xs" style={{ height: "100%" }}>
@@ -78,9 +129,51 @@ export function TranscriptView({
                             </Badge>
                         )}
                     </Group>
-                    <Text size="sm" c={statusColor}>
-                        {statusText}
-                    </Text>
+                    <Group gap="xs">
+                        <Text size="sm" c={statusColor}>
+                            {statusText}
+                        </Text>
+                        {projectId && (
+                            <Menu shadow="md" width={200}>
+                                <Menu.Target>
+                                    <ActionIcon
+                                        variant="subtle"
+                                        color="gray"
+                                        size="lg"
+                                        loading={downloading !== null}
+                                        aria-label="Open Download Options"
+                                    >
+                                        <IconDownload size={18} />
+                                    </ActionIcon>
+                                </Menu.Target>
+
+                                <Menu.Dropdown>
+                                    <Menu.Label>Downloads</Menu.Label>
+                                    <Menu.Item
+                                        leftSection={<IconDownload size={14} />}
+                                        onClick={handleDownloadAudio}
+                                        disabled={downloading !== null}
+                                    >
+                                        Download Audio
+                                    </Menu.Item>
+                                    <Menu.Item
+                                        leftSection={<IconDownload size={14} />}
+                                        onClick={handleDownloadTranscript}
+                                        disabled={downloading !== null}
+                                    >
+                                        Download Transcript
+                                    </Menu.Item>
+                                    <Menu.Item
+                                        leftSection={<IconDownload size={14} />}
+                                        onClick={handleDownloadQuestions}
+                                        disabled={downloading !== null}
+                                    >
+                                        Download Questions
+                                    </Menu.Item>
+                                </Menu.Dropdown>
+                            </Menu>
+                        )}
+                    </Group>
                 </Group>
 
                 <ScrollArea

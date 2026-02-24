@@ -19,6 +19,7 @@ interface TranscriptSectionType {
 interface DesktopLayoutProps {
     transcript: TranscriptSectionType[];
     insights: AnalysisRow[];
+    projectId?: string;
     projectName: string | null;
     connectionState: "disconnected" | "connected" | "connecting" | "failed";
     statusText: string;
@@ -46,6 +47,7 @@ interface DesktopLayoutProps {
 export function DesktopLayout({
     transcript,
     insights,
+    projectId,
     projectName,
     connectionState,
     statusText,
@@ -81,6 +83,7 @@ export function DesktopLayout({
             >
                 <TranscriptView
                     transcript={transcript}
+                    projectId={projectId}
                     projectName={projectName}
                     isConnected={isConnected}
                     statusText={statusText}

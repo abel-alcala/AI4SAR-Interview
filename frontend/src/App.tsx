@@ -28,7 +28,7 @@ function ProjectPage() {
                     },
                 }}
             >
-                <AudioSender />
+                <AudioSender projectId={projectId} />
             </Container>
         </WebSocketProvider>
     );

@@ -2,6 +2,7 @@
 from contextlib import asynccontextmanager
 
 from anyio.from_thread import BlockingPortal
+from interview_helper.downloads.util import sanitize_filename
 from interview_helper.ai_analysis.ai_analysis import SimpleAnalyzer
 from starlette.websockets import WebSocketDisconnect
 from interview_helper.audio_stream_handler.transcription.transcription import (
@@ -16,7 +17,6 @@ from interview_helper.context_manager.messages import (
     TranscriptChunkToSend,
     RecordingStateMessage,
 )
-from starlette.responses import RedirectResponse
 from interview_helper.security.http import (
     verify_jwt_token,
     get_user_info_from_oidc_provider,
@@ -60,7 +60,14 @@ from interview_helper.context_manager.types import ProjectId
 from fastapi.security import OpenIdConnect
 from fastapi import FastAPI, WebSocket, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, Response, RedirectResponse
 import uvicorn
+from pathlib import Path
+import wave
+import tempfile
+import sqlalchemy as sa
+from interview_helper.downloads.get_transcript import generate_transcript
+from interview_helper.context_manager import models
 
 # Configure logging
 logging.basicConfig(
@@ -97,7 +104,7 @@ userinfo_endpoint: str = get_oidc_userinfo_endpoint(
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(_app: FastAPI):
     """background task starts at statrup"""
     await session_manager.start_background_services()
     yield
@@ -120,6 +127,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["Content-Disposition"],
 )
 
 # OIDC Configuration - configured via environment variables
@@ -444,6 +452,180 @@ async def create_project(
     )
 
     return new_project
+
+
+@app.get("/project/{project_id}/download/transcript")
+async def download_transcript(
+    project_id: str, token: Annotated[str, Depends(oidc_scheme)]
+):
+    """
+    Download the transcript for a project as a text file
+    """
+    clean_token = token.removeprefix("Bearer ")
+    _ = verify_jwt_token(clean_token, jwks_client, CLIENT_ID, signing_algos)
+
+    # Verify project exists
+    project_id_typed = ProjectId.from_str(project_id)
+    project = get_project_by_id(session_manager.db, project_id_typed)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    # Generate transcript
+    transcript_text = generate_transcript(
+        project_id=project_id,
+        db=session_manager.db,
+    )
+
+    if transcript_text is None:
+        raise HTTPException(
+            status_code=404, detail="No transcriptions found for this project"
+        )
+
+    project_name = project["name"] or "transcript"
+    safe_filename = sanitize_filename(project_name, "transcript") + "_transcript.txt"
+
+    return Response(
+        content=transcript_text,
+        media_type="text/plain",
+        headers={"Content-Disposition": f'attachment; filename="{safe_filename}"'},
+    )
+
+
+@app.get("/project/{project_id}/download/questions")
+async def download_questions(
+    project_id: str, token: Annotated[str, Depends(oidc_scheme)]
+):
+    """
+    Download all AI-generated questions for a project as a text file
+    """
+    clean_token = token.removeprefix("Bearer ")
+    _ = verify_jwt_token(clean_token, jwks_client, CLIENT_ID, signing_algos)
+
+    # Verify project exists
+    project_id_typed = ProjectId.from_str(project_id)
+    project = get_project_by_id(session_manager.db, project_id_typed)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    # Get all AI analyses (questions)
+    analyses = get_all_ai_analyses(session_manager.db, project_id_typed)
+
+    project_name = project["name"] or "questions"
+    safe_filename = sanitize_filename(project_name, "questions") + "_questions.txt"
+
+    if not analyses:
+        raise HTTPException(
+            status_code=404, detail="No AI-generated questions found for this project"
+        )
+
+    # Format questions as text
+    transcript_lines: list[str] = []
+    transcript_lines.append("=" * 80)
+    transcript_lines.append(f"GENERATED QUESTIONS - {project_name}")
+    transcript_lines.append(f"Project ID: {project_id}")
+    transcript_lines.append(f"Total Questions: {len(analyses)}")
+    transcript_lines.append("=" * 80)
+    transcript_lines.append("")
+
+    for analysis in analyses:
+        transcript_lines.append(f"Question #{analysis.ordinal}:")
+        transcript_lines.append(f"\t{analysis.text}")
+        if analysis.tag:
+            transcript_lines.append(f"\tTag: {analysis.tag}")
+
+        if analysis.span:
+            transcript_lines.append(f'\tContext: "{analysis.span}"')
+
+        transcript_lines.append("")
+
+    questions_text = "\n".join(transcript_lines)
+
+    return Response(
+        content=questions_text,
+        media_type="text/plain",
+        headers={"Content-Disposition": f'attachment; filename="{safe_filename}"'},
+    )
+
+
+@app.get("/project/{project_id}/download/audio")
+async def download_audio(project_id: str, token: Annotated[str, Depends(oidc_scheme)]):
+    """
+    Download all audio recordings for a project stitched together in chronological order
+    """
+    clean_token = token.removeprefix("Bearer ")
+    _ = verify_jwt_token(clean_token, jwks_client, CLIENT_ID, signing_algos)
+
+    # Verify project exists
+    project_id_typed = ProjectId.from_str(project_id)
+    project = get_project_by_id(session_manager.db, project_id_typed)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    # Get all session IDs for this project from the database
+    with session_manager.db.begin() as conn:
+        session_ids_result = conn.execute(
+            sa.select(models.Transcription.session_id)
+            .where(models.Transcription.project_id == project_id)
+            .distinct()
+            .order_by(models.Transcription.session_id.asc())
+        ).all()
+        session_ids: list[str] = [row[0] for row in session_ids_result]
+
+    if not session_ids:
+        raise HTTPException(
+            status_code=404, detail="No audio recordings found for this project"
+        )
+
+    # Find corresponding audio files
+    audio_dir = Path(session_manager.get_settings().audio_recordings_dir)
+    audio_files: list[Path] = []
+    for session_id in session_ids:
+        audio_file = audio_dir / f"recording-{session_id}.wav"
+        if audio_file.exists():
+            audio_files.append(audio_file)
+
+    if not audio_files:
+        raise HTTPException(
+            status_code=404, detail="No audio files found for this project"
+        )
+
+    project_name = project["name"] or "audio"
+    safe_filename = sanitize_filename(project_name, "audio") + "_audio.wav"
+
+    # Stitch audio files together in a temporary file to avoid materializing in memory
+    temp_file = tempfile.NamedTemporaryFile(mode="w+b", suffix=".wav", delete=False)
+    temp_path = Path(temp_file.name)
+    temp_file.close()
+
+    try:
+        # Open first file to get parameters
+        with wave.open(str(audio_files[0]), "rb") as first_wave:
+            params = first_wave.getparams()
+
+            # Create output wave file in temp file
+            with wave.open(str(temp_path), "wb") as output_wave:
+                output_wave.setparams(params)
+
+                # Write all audio files
+                for audio_file in audio_files:
+                    with wave.open(str(audio_file), "rb") as input_wave:
+                        output_wave.writeframes(
+                            input_wave.readframes(input_wave.getnframes())
+                        )
+
+        return FileResponse(
+            temp_path,
+            media_type="audio/wav",
+            filename=safe_filename,
+            headers={"Content-Disposition": f'attachment; filename="{safe_filename}"'},
+        )
+    except Exception as e:
+        # Clean up temp file if error occurs before streaming starts
+        try:
+            temp_path.unlink()
+        except Exception:
+            pass
+        raise e
 
 
 if __name__ == "__main__":
