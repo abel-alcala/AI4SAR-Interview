@@ -211,9 +211,28 @@ export async function deleteProject(
     );
 
     if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(
-            errorText || `Failed to delete project: ${response.status}`,
-        );
+        let errorMessage = `Failed to delete project: ${response.status}`;
+        const contentType = response.headers.get("content-type") || "";
+
+        try {
+            if (contentType.includes("application/json")) {
+                const data = await response.json();
+                if (data && typeof data === "object" && "detail" in data) {
+                    errorMessage = (data as { detail: string }).detail || errorMessage;
+                } else {
+                    // Fallback: stringify JSON if no "detail" field is present
+                    errorMessage = JSON.stringify(data);
+                }
+            } else {
+                const errorText = await response.text();
+                if (errorText) {
+                    errorMessage = errorText;
+                }
+            }
+        } catch {
+            // Ignore parsing errors and keep the default errorMessage
+        }
+
+        throw new Error(errorMessage);
     }
 }
