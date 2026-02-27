@@ -59,7 +59,7 @@ def generate_transcript(
             and current_speaker is not None
             and current_timestamp is not None
         ):
-            timestamp_str = current_timestamp.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+            timestamp_str = current_timestamp.strftime("%Y-%m-%d %H:%M:%S %Z")
             combined_text = " ".join(current_texts)
             transcript_lines.append(f"[{timestamp_str}] {current_speaker}:")
             transcript_lines.append(f"  {combined_text}")
@@ -76,7 +76,7 @@ def generate_transcript(
 
     # Write out the last group
     if current_speaker and current_texts and current_timestamp is not None:
-        timestamp_str = current_timestamp.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+        timestamp_str = current_timestamp.strftime("%Y-%m-%d %H:%M:%S %Z")
         combined_text = " ".join(current_texts)
         transcript_lines.append(f"[{timestamp_str}] {current_speaker}:")
         transcript_lines.append(f"  {combined_text}")

@@ -15,6 +15,7 @@ import {
 import {
     IconArrowBackUp,
     IconBulb,
+    IconCheck,
     IconStar,
     IconStarFilled,
     IconX,
@@ -26,7 +27,8 @@ interface InsightsPanelProps {
     insights: AnalysisRow[];
     onStar: (analysisId: string) => void;
     onUnstar: (analysisId: string) => void;
-    onDismiss: (analysisId: string) => void;
+    onDismissAsAnswered: (analysisId: string) => void;
+    onDismissNotAnswered: (analysisId: string) => void;
     onUndoDismiss: (analysisId: string) => void;
     onSpanClick?: (transcriptId: string, spanText: string) => void;
 }
@@ -35,7 +37,8 @@ export function InsightsPanel({
     insights,
     onStar,
     onUnstar,
-    onDismiss,
+    onDismissAsAnswered,
+    onDismissNotAnswered,
     onUndoDismiss,
     onSpanClick,
 }: InsightsPanelProps) {
@@ -103,12 +106,27 @@ export function InsightsPanel({
                         <IconStar size={14} />
                     </ActionIcon>
                 </Tooltip>
-                <Tooltip label="Dismiss question">
+                <Tooltip label="Mark as answered">
+                    <ActionIcon
+                        size="sm"
+                        variant="subtle"
+                        color="green"
+                        onClick={() =>
+                            onDismissAsAnswered(analysis.analysis_id)
+                        }
+                        aria-label="Mark as answered"
+                    >
+                        <IconCheck size={14} />
+                    </ActionIcon>
+                </Tooltip>
+                <Tooltip label="Dismiss (not answered)">
                     <ActionIcon
                         size="sm"
                         variant="subtle"
                         color="gray"
-                        onClick={() => onDismiss(analysis.analysis_id)}
+                        onClick={() =>
+                            onDismissNotAnswered(analysis.analysis_id)
+                        }
                         aria-label="Dismiss question"
                     >
                         <IconX size={14} />
@@ -171,12 +189,27 @@ export function InsightsPanel({
                         <IconStarFilled size={14} />
                     </ActionIcon>
                 </Tooltip>
-                <Tooltip label="Dismiss question">
+                <Tooltip label="Mark as answered">
+                    <ActionIcon
+                        size="sm"
+                        variant="subtle"
+                        color="green"
+                        onClick={() =>
+                            onDismissAsAnswered(analysis.analysis_id)
+                        }
+                        aria-label="Mark as answered"
+                    >
+                        <IconCheck size={14} />
+                    </ActionIcon>
+                </Tooltip>
+                <Tooltip label="Dismiss (not answered)">
                     <ActionIcon
                         size="sm"
                         variant="subtle"
                         color="gray"
-                        onClick={() => onDismiss(analysis.analysis_id)}
+                        onClick={() =>
+                            onDismissNotAnswered(analysis.analysis_id)
+                        }
                         aria-label="Dismiss question"
                     >
                         <IconX size={14} />
@@ -195,6 +228,16 @@ export function InsightsPanel({
                             size={14}
                             color="var(--mantine-color-yellow-6)"
                         />
+                    )}
+                    {analysis.was_asked && (
+                        <Badge size="xs" color="green" variant="light">
+                            Asked
+                        </Badge>
+                    )}
+                    {analysis.was_asked === false && (
+                        <Badge size="xs" color="gray" variant="light">
+                            Not Asked
+                        </Badge>
                     )}
                     <Text size="sm" c="dimmed">
                         <Text component="span" size="xs" fw={600}>

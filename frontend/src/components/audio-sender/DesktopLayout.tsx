@@ -37,7 +37,8 @@ interface DesktopLayoutProps {
     ) => void;
     onStarInsight: (analysisId: string) => void;
     onUnstarInsight: (analysisId: string) => void;
-    onDismissInsight: (analysisId: string) => void;
+    onDismissAsAnswered: (analysisId: string) => void;
+    onDismissNotAnswered: (analysisId: string) => void;
     onUndoDismiss: (analysisId: string) => void;
     onSpanClick: (transcriptId: string, spanText: string) => void;
     onStartRecording: () => void;
@@ -62,7 +63,8 @@ export function DesktopLayout({
     onRegisterChunkRef,
     onStarInsight,
     onUnstarInsight,
-    onDismissInsight,
+    onDismissAsAnswered,
+    onDismissNotAnswered,
     onUndoDismiss,
     onSpanClick,
     onStartRecording,
@@ -112,7 +114,8 @@ export function DesktopLayout({
                     insights={insights}
                     onStar={onStarInsight}
                     onUnstar={onUnstarInsight}
-                    onDismiss={onDismissInsight}
+                    onDismissAsAnswered={onDismissAsAnswered}
+                    onDismissNotAnswered={onDismissNotAnswered}
                     onUndoDismiss={onUndoDismiss}
                     onSpanClick={onSpanClick}
                 />

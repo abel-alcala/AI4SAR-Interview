@@ -64,6 +64,8 @@ export interface AnalysisRow {
     is_dismissed: boolean;
     tag: string | null;
     ordinal: number;
+    was_asked?: boolean | null;
+    asked_at_transcript_id?: string | null;
 }
 
 export interface CatchupMessage {
@@ -85,6 +87,8 @@ export interface UpdateAIAnalysisTag {
     timestamp: string;
     analysis_id: string;
     tag: "starred" | "dismissed" | "starred_dismissed" | null;
+    was_asked?: boolean | null;
+    asked_at_transcript_id?: string | null;
 }
 
 export interface RecordingStateMessage {

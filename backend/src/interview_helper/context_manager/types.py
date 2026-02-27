@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from typing import (
     TypeVar,
     Generic,
@@ -96,6 +97,9 @@ class TranscriptId:
     @classmethod
     def from_str(cls, transcript_id: str) -> "TranscriptId":
         return cls(_transcript_id=ULID.from_str(transcript_id.upper()))
+
+    def get_datetime(self):
+        return datetime.fromtimestamp(self._transcript_id.timestamp, tz=timezone.utc)
 
 
 UserIP = NewType("UserIP", str)

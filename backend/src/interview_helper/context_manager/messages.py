@@ -70,6 +70,8 @@ class UpdateAIAnalysisTag(BaseModel):
     timestamp: datetime = Field(default_factory=datetime.now)
     analysis_id: str
     tag: Literal["starred", "dismissed", "starred_dismissed"] | None
+    was_asked: bool | None = None
+    asked_at_transcript_id: str | None = None
 
 
 class RecordingStateMessage(BaseModel):
