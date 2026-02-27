@@ -12,11 +12,21 @@ import {
     Title,
     Loader,
     Center,
+    ActionIcon,
+    Alert,
+    Menu,
 } from "@mantine/core";
+import { IconTrash, IconDots } from "@tabler/icons-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "react-oidc-context";
-import { fetchProjects, createProject } from "../lib/api";
-import type { ProjectListing } from "../lib/api";
+import {
+    fetchProjects,
+    createProject,
+    getProjectInfo,
+    deleteProject,
+    getCurrentUser,
+} from "../lib/api";
+import type { ProjectListing, ProjectInfo, CurrentUser } from "../lib/api";
 
 export default function ProjectList() {
     const [projects, setProjects] = useState<ProjectListing[]>([]);
@@ -25,11 +35,22 @@ export default function ProjectList() {
     const [createModalOpen, setCreateModalOpen] = useState(false);
     const [newProjectName, setNewProjectName] = useState("");
     const [creating, setCreating] = useState(false);
+    const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
+
+    // Delete modal state
+    const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+    const [projectToDelete, setProjectToDelete] = useState<ProjectInfo | null>(
+        null,
+    );
+    const [deleteConfirmName, setDeleteConfirmName] = useState("");
+    const [deleting, setDeleting] = useState(false);
+    const [deleteError, setDeleteError] = useState<string | null>(null);
+
     const navigate = useNavigate();
     const auth = useAuth();
 
     useEffect(() => {
-        const loadProjects = async () => {
+        const loadData = async () => {
             try {
                 setLoading(true);
                 setError(null);
@@ -37,20 +58,23 @@ export default function ProjectList() {
                 if (!token) {
                     throw new Error("No access token available");
                 }
-                const data = await fetchProjects(token);
-                setProjects(data);
+                // Load both user info and projects
+                const [userData, projectsData] = await Promise.all([
+                    getCurrentUser(token),
+                    fetchProjects(token),
+                ]);
+                setCurrentUser(userData);
+                setProjects(projectsData);
             } catch (err) {
                 setError(
-                    err instanceof Error
-                        ? err.message
-                        : "Failed to load projects",
+                    err instanceof Error ? err.message : "Failed to load data",
                 );
             } finally {
                 setLoading(false);
             }
         };
 
-        loadProjects();
+        loadData();
     }, []);
 
     const handleCreateProject = async () => {
@@ -83,6 +107,66 @@ export default function ProjectList() {
     const handleProjectClick = (projectId: string) => {
         navigate(`/project/${projectId}`);
     };
+
+    const handleDeleteClick = async (
+        e: React.MouseEvent,
+        project: ProjectListing,
+    ) => {
+        e.stopPropagation(); // Prevent card click
+
+        try {
+            const token = auth.user?.access_token;
+            if (!token) {
+                throw new Error("No access token available");
+            }
+
+            // Fetch full project info including session count
+            const projectInfo = await getProjectInfo(project.id, token);
+            setProjectToDelete(projectInfo);
+            setDeleteModalOpen(true);
+            setDeleteConfirmName("");
+            setDeleteError(null);
+        } catch (err) {
+            setError(
+                err instanceof Error
+                    ? err.message
+                    : "Failed to load project info",
+            );
+        }
+    };
+
+    const handleDeleteConfirm = async () => {
+        if (!projectToDelete) return;
+
+        try {
+            setDeleting(true);
+            setDeleteError(null);
+            const token = auth.user?.access_token;
+            if (!token) {
+                throw new Error("No access token available");
+            }
+
+            await deleteProject(projectToDelete.id, deleteConfirmName, token);
+
+            // Remove project from list
+            setProjects((prevProjects) =>
+                prevProjects.filter((p) => p.id !== projectToDelete.id),
+            );
+
+            // Close modal
+            setDeleteModalOpen(false);
+            setProjectToDelete(null);
+            setDeleteConfirmName("");
+        } catch (err) {
+            setDeleteError(
+                err instanceof Error ? err.message : "Failed to delete project",
+            );
+        } finally {
+            setDeleting(false);
+        }
+    };
+
+    const isDeleteConfirmValid = deleteConfirmName === projectToDelete?.name;
 
     if (loading) {
         return (
@@ -123,35 +207,87 @@ export default function ProjectList() {
                 </Card>
             ) : (
                 <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }} spacing="lg">
-                    {projects.map((project) => (
-                        <Card
-                            key={project.id}
-                            shadow="sm"
-                            padding="lg"
-                            radius="md"
-                            withBorder
-                            style={{ cursor: "pointer" }}
-                            onClick={() => handleProjectClick(project.id)}
-                        >
-                            <Stack gap="sm">
-                                <Text fw={500} size="lg">
-                                    {project.name}
-                                </Text>
-                                <Text size="xs" c="dimmed">
-                                    Created by {project.creator_name}
-                                </Text>
-                                <Text size="xs" c="dimmed">
-                                    {new Date(
-                                        project.created_at,
-                                    ).toLocaleDateString("en-US", {
-                                        year: "numeric",
-                                        month: "long",
-                                        day: "numeric",
-                                    })}
-                                </Text>
-                            </Stack>
-                        </Card>
-                    ))}
+                    {projects.map((project) => {
+                        const isOwnProject =
+                            currentUser?.user_id === project.creator_user_id;
+                        return (
+                            <Card
+                                key={project.id}
+                                shadow="sm"
+                                padding="lg"
+                                radius="md"
+                                withBorder
+                                style={{
+                                    cursor: "pointer",
+                                    position: "relative",
+                                }}
+                                onClick={() => handleProjectClick(project.id)}
+                            >
+                                <Stack gap="sm">
+                                    <Group
+                                        justify="space-between"
+                                        align="flex-start"
+                                    >
+                                        <Text
+                                            fw={500}
+                                            size="lg"
+                                            style={{ flex: 1 }}
+                                        >
+                                            {project.name}
+                                        </Text>
+                                        {isOwnProject && (
+                                            <Menu
+                                                position="bottom-end"
+                                                withinPortal
+                                            >
+                                                <Menu.Target>
+                                                    <ActionIcon
+                                                        variant="subtle"
+                                                        onClick={(e) =>
+                                                            e.stopPropagation()
+                                                        }
+                                                        aria-label="Project options"
+                                                    >
+                                                        <IconDots size={18} />
+                                                    </ActionIcon>
+                                                </Menu.Target>
+                                                <Menu.Dropdown>
+                                                    <Menu.Item
+                                                        color="red"
+                                                        leftSection={
+                                                            <IconTrash
+                                                                size={16}
+                                                            />
+                                                        }
+                                                        onClick={(e) =>
+                                                            handleDeleteClick(
+                                                                e,
+                                                                project,
+                                                            )
+                                                        }
+                                                    >
+                                                        Delete project
+                                                    </Menu.Item>
+                                                </Menu.Dropdown>
+                                            </Menu>
+                                        )}
+                                    </Group>
+                                    <Text size="xs" c="dimmed">
+                                        Created by {project.creator_name}
+                                    </Text>
+                                    <Text size="xs" c="dimmed">
+                                        {new Date(
+                                            project.created_at,
+                                        ).toLocaleDateString("en-US", {
+                                            year: "numeric",
+                                            month: "long",
+                                            day: "numeric",
+                                        })}
+                                    </Text>
+                                </Stack>
+                            </Card>
+                        );
+                    })}
                 </SimpleGrid>
             )}
 
@@ -195,6 +331,78 @@ export default function ProjectList() {
                             Create
                         </Button>
                     </Group>
+                </Stack>
+            </Modal>
+
+            <Modal
+                opened={deleteModalOpen}
+                onClose={() => {
+                    setDeleteModalOpen(false);
+                    setProjectToDelete(null);
+                    setDeleteConfirmName("");
+                    setDeleteError(null);
+                }}
+                title="Delete Project"
+            >
+                <Stack>
+                    {projectToDelete && (
+                        <>
+                            <Alert color="red" title="Warning">
+                                This action cannot be undone. This will
+                                permanently delete the project{" "}
+                                <strong>{projectToDelete.name}</strong> and all
+                                associated data including:
+                                <ul style={{ marginTop: "8px" }}>
+                                    <li>
+                                        {projectToDelete.session_count} session
+                                        {projectToDelete.session_count !== 1
+                                            ? "s"
+                                            : ""}
+                                    </li>
+                                    <li>All transcriptions</li>
+                                    <li>All audio recordings</li>
+                                    <li>All AI-generated questions</li>
+                                </ul>
+                            </Alert>
+
+                            <Text size="sm">
+                                Please type{" "}
+                                <strong>{projectToDelete.name}</strong> to
+                                confirm deletion:
+                            </Text>
+
+                            <TextInput
+                                placeholder={projectToDelete.name}
+                                value={deleteConfirmName}
+                                onChange={(e) =>
+                                    setDeleteConfirmName(e.currentTarget.value)
+                                }
+                                error={deleteError}
+                            />
+
+                            <Group justify="flex-end">
+                                <Button
+                                    variant="subtle"
+                                    onClick={() => {
+                                        setDeleteModalOpen(false);
+                                        setProjectToDelete(null);
+                                        setDeleteConfirmName("");
+                                        setDeleteError(null);
+                                    }}
+                                >
+                                    Cancel
+                                </Button>
+                                <Button
+                                    color="red"
+                                    onClick={handleDeleteConfirm}
+                                    loading={deleting}
+                                    disabled={!isDeleteConfirmValid}
+                                >
+                                    Delete Project
+                                </Button>
+                            </Group>
+                        </>
+                    )}
                 </Stack>
             </Modal>
         </Container>

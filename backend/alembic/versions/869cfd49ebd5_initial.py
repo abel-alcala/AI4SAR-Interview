@@ -38,7 +38,7 @@ def upgrade() -> None:
     _ = op.create_table(
         "project",
         sa.Column("project_id", sa.String(length=26), nullable=False),
-        sa.Column("name", sa.Text(), nullable=True),
+        sa.Column("name", sa.Text(), nullable=False),
         sa.Column("creator_user_id", sa.String(length=26), nullable=False),
         sa.Column(
             "created_at",
