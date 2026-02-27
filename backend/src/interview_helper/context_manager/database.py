@@ -651,7 +651,10 @@ def update_ai_analysis_tag(
         # Only update answered fields if they are provided
         if was_asked is not None:
             update_values["was_asked"] = was_asked
-        if asked_at_transcript_id is not None:
+
+        if asked_at_transcript_id is None:
+            update_values["asked_at_transcript_id"] = None
+        else:
             update_values["asked_at_transcript_id"] = asked_at_transcript_id
 
         _ = conn.execute(

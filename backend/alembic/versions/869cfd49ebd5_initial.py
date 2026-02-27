@@ -59,6 +59,28 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("project_id"),
     )
     _ = op.create_table(
+        "sessions",
+        sa.Column("session_id", sa.String(length=26), nullable=False),
+        sa.Column("project_id", sa.String(length=26), nullable=False),
+        sa.Column("user_id", sa.String(length=26), nullable=False),
+        sa.Column(
+            "started_at",
+            sa.DateTime(),
+            server_default=sa.text("(CURRENT_TIMESTAMP)"),
+            nullable=False,
+        ),
+        sa.Column("ended_at", sa.DateTime(), nullable=True),
+        sa.ForeignKeyConstraint(
+            ["project_id"],
+            ["project.project_id"],
+        ),
+        sa.ForeignKeyConstraint(
+            ["user_id"],
+            ["users.user_id"],
+        ),
+        sa.PrimaryKeyConstraint("session_id"),
+    )
+    _ = op.create_table(
         "transcriptions",
         sa.Column("transcription_id", sa.String(length=26), nullable=False),
         sa.Column("project_id", sa.String(length=26), nullable=False),
@@ -87,28 +109,6 @@ def upgrade() -> None:
             ["users.user_id"],
         ),
         sa.PrimaryKeyConstraint("transcription_id"),
-    )
-    _ = op.create_table(
-        "sessions",
-        sa.Column("session_id", sa.String(length=26), nullable=False),
-        sa.Column("project_id", sa.String(length=26), nullable=False),
-        sa.Column("user_id", sa.String(length=26), nullable=False),
-        sa.Column(
-            "started_at",
-            sa.DateTime(),
-            server_default=sa.text("(CURRENT_TIMESTAMP)"),
-            nullable=False,
-        ),
-        sa.Column("ended_at", sa.DateTime(), nullable=True),
-        sa.ForeignKeyConstraint(
-            ["project_id"],
-            ["project.project_id"],
-        ),
-        sa.ForeignKeyConstraint(
-            ["user_id"],
-            ["users.user_id"],
-        ),
-        sa.PrimaryKeyConstraint("session_id"),
     )
     _ = op.create_table(
         "ai_analyses",
@@ -285,7 +285,7 @@ def upgrade() -> None:
 def downgrade() -> None:
     """Downgrade schema."""
     op.drop_table("ai_analyses")
-    op.drop_table("sessions")
     op.drop_table("transcriptions")
+    op.drop_table("sessions")
     op.drop_table("project")
     op.drop_table("users")

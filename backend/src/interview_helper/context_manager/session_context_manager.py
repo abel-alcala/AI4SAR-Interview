@@ -143,6 +143,7 @@ class AppContextManager:
         ],
         ai_processer: type[AIAnalyzer],
         settings: Settings | None = None,
+        db: PersistentDatabase | None = None,
     ):
         # We need to protect against race-conditions since our context might end up in an
         # inconsistent state between threads.
@@ -177,7 +178,7 @@ class AppContextManager:
         self.settings = settings
         self.ticket_store = TicketStore()
 
-        self.db = PersistentDatabase()
+        self.db = db or PersistentDatabase()
 
         self.ai_processor: None | AIAnalyzer = (
             ai_processer(settings, self.db) if settings else None
