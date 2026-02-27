@@ -54,6 +54,9 @@ from interview_helper.context_manager.database import (
     get_project_by_id,
     get_all_transcripts,
     get_all_ai_analyses,
+    get_project_session_count,
+    delete_project,
+    get_project_creator_and_name,
 )
 from interview_helper.context_manager.types import ProjectId, TranscriptId
 
@@ -422,6 +425,25 @@ async def websocket_endpoint(
         logger.info(f"Closed session {context.session_id} for user {ticket.user_id}")
 
 
+@app.get("/user/me")
+async def get_current_user(token: Annotated[str, Depends(oidc_scheme)]):
+    """
+    Returns the current user's information
+    """
+    clean_token = token.removeprefix("Bearer ")
+    user_claims = verify_jwt_token(clean_token, jwks_client, CLIENT_ID, signing_algos)
+
+    user_info = await get_user_info_from_oidc_provider(clean_token, userinfo_endpoint)
+    name = f"{user_info.given_name or ''} {user_info.family_name or ''}".strip()
+    user = get_or_add_user_by_oidc_id(session_manager.db, user_claims.sub, name)
+
+    return {
+        "user_id": str(user.user_id),
+        "full_name": user.full_name,
+        "oidc_id": user.oidc_id,
+    }
+
+
 @app.get("/project")
 async def list_all_projects(token: Annotated[str, Depends(oidc_scheme)]):
     """
@@ -454,6 +476,75 @@ async def create_project(
     )
 
     return new_project
+
+
+@app.delete("/project/{project_id}")
+async def delete_project_endpoint(
+    project_id: str, confirmed_name: str, token: Annotated[str, Depends(oidc_scheme)]
+):
+    """
+    Deletes a project and all associated data (sessions, transcriptions, audio files, questions).
+    Only the project creator can delete the project.
+    Requires confirmation by providing the exact project name.
+    """
+    clean_token = token.removeprefix("Bearer ")
+    user_claims = verify_jwt_token(clean_token, jwks_client, CLIENT_ID, signing_algos)
+
+    # Get user info
+    user_info = await get_user_info_from_oidc_provider(clean_token, userinfo_endpoint)
+    name = f"{user_info.given_name or ''} {user_info.family_name or ''}".strip()
+    user_id = get_or_add_user_by_oidc_id(
+        session_manager.db, user_claims.sub, name
+    ).user_id
+
+    # Verify project exists and get creator info
+    project_id_typed = ProjectId.from_str(project_id)
+
+    project_info = get_project_creator_and_name(session_manager.db, project_id_typed)
+    if project_info is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    # Check if user is the creator
+    if project_info.creator_user_id != user_id:
+        raise HTTPException(
+            status_code=403, detail="Only the project creator can delete this project"
+        )
+
+    # Verify the confirmed name matches
+    if confirmed_name != project_info.name:
+        raise HTTPException(
+            status_code=400, detail="Project name confirmation does not match"
+        )
+
+    # Delete the project and all related data
+    delete_project(
+        session_manager.db,
+        project_id_typed,
+        session_manager.get_settings().audio_recordings_dir,
+    )
+
+    return {"status": "success", "message": "Project deleted successfully"}
+
+
+@app.get("/project/{project_id}/info")
+async def get_project_info(
+    project_id: str, token: Annotated[str, Depends(oidc_scheme)]
+):
+    """
+    Gets project information including session count for delete confirmation
+    """
+    clean_token = token.removeprefix("Bearer ")
+    _user_claims = verify_jwt_token(clean_token, jwks_client, CLIENT_ID, signing_algos)
+
+    project_id_typed = ProjectId.from_str(project_id)
+    project = get_project_by_id(session_manager.db, project_id_typed)
+
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    session_count = get_project_session_count(session_manager.db, project_id_typed)
+
+    return {**project, "session_count": session_count}
 
 
 @app.get("/project/{project_id}/download/transcript")

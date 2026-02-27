@@ -366,6 +366,7 @@ class ProjectListing(TypedDict):
     id: str
     name: str
     creator_name: str
+    creator_user_id: str
     created_at: str
 
 
@@ -374,12 +375,13 @@ def get_all_projects(db: PersistentDatabase) -> Sequence[ProjectListing]:
     Gets all projects with creator name and creation date, sorted by creation date (descending)
     """
     with db.begin() as conn:
-        rows: Sequence[tuple[str, str, str, DateTime]] = (
+        rows: Sequence[tuple[str, str, str, str, DateTime]] = (
             conn.execute(
                 sa.select(
                     models.Project.project_id,
                     models.Project.name,
                     models.User.full_name,
+                    models.Project.creator_user_id,
                     models.Project.created_at,
                 )
                 .join(
@@ -392,12 +394,13 @@ def get_all_projects(db: PersistentDatabase) -> Sequence[ProjectListing]:
         )
 
     projects: list[ProjectListing] = []
-    for project_id, project_name, creator_name, created_at in rows:
+    for project_id, project_name, creator_name, creator_user_id, created_at in rows:
         projects.append(
             {
                 "id": project_id,
                 "name": project_name,
                 "creator_name": creator_name,
+                "creator_user_id": creator_user_id,
                 "created_at": created_at.isoformat(),  # pyright: ignore[reportAttributeAccessIssue, reportUnknownMemberType]
             }
         )
@@ -433,6 +436,7 @@ def create_new_project(
         "id": project_id,
         "name": project_name,
         "creator_name": user.full_name,
+        "creator_user_id": str(user.user_id),
         "created_at": created_at.isoformat(),  # pyright: ignore[reportAttributeAccessIssue, reportUnknownMemberType]
     }
 
@@ -449,6 +453,7 @@ def get_project_by_id(
                 models.Project.project_id,
                 models.Project.name,
                 models.User.full_name,
+                models.Project.creator_user_id,
                 models.Project.created_at,
             )
             .join(models.User, models.Project.creator_user_id == models.User.user_id)
@@ -458,14 +463,47 @@ def get_project_by_id(
         if result is None:
             return None
 
-        project_id_str, project_name, creator_name, created_at = result.tuple()
+        project_id_str, project_name, creator_name, creator_user_id, created_at = (
+            result.tuple()
+        )
 
         return {
             "id": project_id_str,
             "name": project_name,
             "creator_name": creator_name,
+            "creator_user_id": creator_user_id,
             "created_at": created_at.isoformat(),  # pyright: ignore[reportAttributeAccessIssue, reportUnknownMemberType]
         }
+
+
+@dataclass
+class ProjectCreatorInfo:
+    creator_user_id: UserId
+    name: str
+
+
+def get_project_creator_and_name(
+    db: PersistentDatabase, project_id: ProjectId
+) -> ProjectCreatorInfo | None:
+    """
+    Gets the creator user ID and project name for a project.
+    Returns None if the project doesn't exist.
+    """
+    with db.begin() as conn:
+        result = conn.execute(
+            sa.select(models.Project.creator_user_id, models.Project.name).where(
+                models.Project.project_id == str(project_id)
+            )
+        ).one_or_none()
+
+        if result is None:
+            return None
+
+        creator_user_id_str, project_name = result.tuple()
+        return ProjectCreatorInfo(
+            creator_user_id=UserId.from_str(creator_user_id_str),
+            name=project_name,
+        )
 
 
 class AnalysisRow(BaseModel):
@@ -847,3 +885,79 @@ def get_session_sequence_number(
         ).scalar_one()
 
         return result  # pyright: ignore[reportAny]
+
+
+def get_project_session_count(db: PersistentDatabase, project_id: ProjectId) -> int:
+    """
+    Gets the number of sessions for a project
+    """
+    with db.begin() as conn:
+        result = conn.execute(
+            sa.select(sa.func.count(models.Session.session_id)).where(
+                models.Session.project_id == str(project_id)
+            )
+        ).scalar_one()
+
+        return int(result)
+
+
+def delete_project(
+    db: PersistentDatabase, project_id: ProjectId, audio_recordings_dir: str
+) -> None:
+    """
+    Deletes a project and all related data including:
+    - AI analyses
+    - Transcriptions
+    - Sessions (and their audio files)
+    - The project itself
+
+    Args:
+        db: The database instance
+        project_id: The project ID to delete
+        audio_recordings_dir: The directory where audio recordings are stored
+    """
+    recordings_path = Path(audio_recordings_dir)
+
+    with db.begin() as conn:
+        # Get all session IDs for this project to delete audio files
+        session_ids_result = conn.execute(
+            sa.select(models.Session.session_id).where(
+                models.Session.project_id == str(project_id)
+            )
+        ).all()
+
+        session_ids: list[str] = [str(row[0]) for row in session_ids_result]  # pyright: ignore[reportAny]
+
+        # Delete audio files for each session
+        for session_id in session_ids:
+            audio_file = recordings_path / f"recording-{session_id}.wav"
+            if audio_file.exists():
+                audio_file.unlink()
+
+        # Delete AI analyses
+        _ = conn.execute(
+            sa.delete(models.AIAnalysis).where(
+                models.AIAnalysis.project_id == str(project_id)
+            )
+        )
+
+        # Delete transcriptions
+        _ = conn.execute(
+            sa.delete(models.Transcription).where(
+                models.Transcription.project_id == str(project_id)
+            )
+        )
+
+        # Delete sessions
+        _ = conn.execute(
+            sa.delete(models.Session).where(
+                models.Session.project_id == str(project_id)
+            )
+        )
+
+        # Delete the project itself
+        _ = conn.execute(
+            sa.delete(models.Project).where(
+                models.Project.project_id == str(project_id)
+            )
+        )

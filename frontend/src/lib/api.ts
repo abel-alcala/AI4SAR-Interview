@@ -4,7 +4,18 @@ export interface ProjectListing {
     id: string;
     name: string;
     creator_name: string;
+    creator_user_id: string;
     created_at: string;
+}
+
+export interface CurrentUser {
+    user_id: string;
+    full_name: string;
+    oidc_id: string;
+}
+
+export interface ProjectInfo extends ProjectListing {
+    session_count: number;
 }
 
 /**
@@ -30,6 +41,13 @@ async function authenticatedFetch<T>(
     }
 
     return response.json();
+}
+
+/**
+ * Get current user information
+ */
+export async function getCurrentUser(token: string): Promise<CurrentUser> {
+    return authenticatedFetch<CurrentUser>("/user/me", token);
 }
 
 /**
@@ -162,4 +180,40 @@ export async function downloadAudio(
     a.click();
     window.URL.revokeObjectURL(url);
     document.body.removeChild(a);
+}
+
+/**
+ * Get project info including session count
+ */
+export async function getProjectInfo(
+    projectId: string,
+    token: string,
+): Promise<ProjectInfo> {
+    return authenticatedFetch<ProjectInfo>(`/project/${projectId}/info`, token);
+}
+
+/**
+ * Delete a project
+ */
+export async function deleteProject(
+    projectId: string,
+    confirmedName: string,
+    token: string,
+): Promise<void> {
+    const response = await fetch(
+        `${BACKEND_URL}/project/${projectId}?confirmed_name=${encodeURIComponent(confirmedName)}`,
+        {
+            method: "DELETE",
+            headers: {
+                Authorization: `Bearer ${token}`,
+            },
+        },
+    );
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(
+            errorText || `Failed to delete project: ${response.status}`,
+        );
+    }
 }
