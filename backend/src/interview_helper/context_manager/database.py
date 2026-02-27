@@ -18,6 +18,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 import interview_helper.context_manager.models as models
 from ulid import ULID
+import logging
 
 
 class PersistentDatabase:
@@ -915,11 +916,17 @@ def delete_project(
         db: The database instance
         project_id: The project ID to delete
         audio_recordings_dir: The directory where audio recordings are stored
+
+    Note:
+        This function first commits all database deletes, then deletes audio files.
+        This ensures transaction safety - if the DB delete fails, files remain intact.
+        If file deletion fails after DB commit, at least the DB is consistent.
     """
     recordings_path = Path(audio_recordings_dir)
 
+    # Collect session IDs within transaction, then commit DB deletes before touching filesystem
     with db.begin() as conn:
-        # Get all session IDs for this project to delete audio files
+        # Get all session IDs for this project to delete audio files later
         session_ids_result = conn.execute(
             sa.select(models.Session.session_id).where(
                 models.Session.project_id == str(project_id)
@@ -927,12 +934,6 @@ def delete_project(
         ).all()
 
         session_ids: list[str] = [str(row[0]) for row in session_ids_result]  # pyright: ignore[reportAny]
-
-        # Delete audio files for each session
-        for session_id in session_ids:
-            audio_file = recordings_path / f"recording-{session_id}.wav"
-            if audio_file.exists():
-                audio_file.unlink()
 
         # Delete AI analyses
         _ = conn.execute(
@@ -961,3 +962,14 @@ def delete_project(
                 models.Project.project_id == str(project_id)
             )
         )
+        # Transaction commits here when exiting the context manager
+
+    # Now that DB deletes are committed, delete audio files from filesystem
+    for session_id in session_ids:
+        audio_file = recordings_path / f"recording-{session_id}.wav"
+        if audio_file.exists():
+            try:
+                audio_file.unlink()
+            except OSError as e:
+                # Log the error but don't fail - DB is already consistent
+                logging.warning(f"Failed to delete audio file {audio_file}: {e}")

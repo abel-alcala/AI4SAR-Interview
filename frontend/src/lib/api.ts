@@ -218,7 +218,8 @@ export async function deleteProject(
             if (contentType.includes("application/json")) {
                 const data = await response.json();
                 if (data && typeof data === "object" && "detail" in data) {
-                    errorMessage = (data as { detail: string }).detail || errorMessage;
+                    errorMessage =
+                        (data as { detail: string }).detail || errorMessage;
                 } else {
                     // Fallback: stringify JSON if no "detail" field is present
                     errorMessage = JSON.stringify(data);
