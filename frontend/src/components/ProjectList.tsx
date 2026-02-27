@@ -149,7 +149,9 @@ export default function ProjectList() {
             await deleteProject(projectToDelete.id, deleteConfirmName, token);
 
             // Remove project from list
-            setProjects(projects.filter((p) => p.id !== projectToDelete.id));
+            setProjects((prevProjects) =>
+                prevProjects.filter((p) => p.id !== projectToDelete.id),
+            );
 
             // Close modal
             setDeleteModalOpen(false);
