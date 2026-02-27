@@ -1,13 +1,13 @@
-from datetime import datetime
+from datetime import datetime, timezone
 import ulid
 from dateutil.relativedelta import relativedelta
 
 
 def extract_timestamp_from_ulid(ulid_str: str) -> datetime:
-    """Extract timestamp from a ULID string."""
+    """Extract timestamp from a ULID string as a UTC datetime."""
     ulid_obj: ulid.ULID = ulid.ULID.from_str(ulid_str.upper())  # pyright: ignore[reportAny]
     timestamp_float = ulid_obj.timestamp
-    return datetime.fromtimestamp(timestamp_float)
+    return datetime.fromtimestamp(timestamp_float, tz=timezone.utc)
 
 
 def human_readable(delta: relativedelta) -> list[str]:

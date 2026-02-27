@@ -54,6 +54,22 @@ class Transcription(Base):
     user: Mapped["User"] = relationship(backref="transcriptions")
 
 
+class Session(Base):
+    __tablename__: str = "sessions"
+
+    session_id: Mapped[str] = mapped_column(sa.String(26), primary_key=True)
+    project_id: Mapped[str] = mapped_column(
+        sa.String(26), ForeignKey("project.project_id"), nullable=False
+    )
+    user_id: Mapped[str] = mapped_column(
+        sa.String(26), ForeignKey("users.user_id"), nullable=False
+    )
+    started_at: Mapped[DateTime] = mapped_column(
+        sa.DateTime, nullable=False, server_default=sa.func.now()
+    )
+    ended_at: Mapped[DateTime | None] = mapped_column(sa.DateTime, nullable=True)
+
+
 class AIAnalysis(Base):
     __tablename__: str = "ai_analyses"
 
@@ -84,6 +100,12 @@ class AIAnalysis(Base):
 
     time_tag_changed: Mapped[DateTime | None] = mapped_column(
         sa.DateTime, nullable=True
+    )
+
+    # Fields for tracking if the question was asked
+    was_asked: Mapped[bool | None] = mapped_column(sa.Boolean, nullable=True)
+    asked_at_transcript_id: Mapped[str | None] = mapped_column(
+        sa.String(26), ForeignKey("transcriptions.transcription_id"), nullable=True
     )
 
 

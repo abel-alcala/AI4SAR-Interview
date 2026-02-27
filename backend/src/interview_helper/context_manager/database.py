@@ -155,6 +155,26 @@ def get_or_add_user_by_oidc_id(
         )
 
 
+def create_session(
+    db: PersistentDatabase,
+    session_id: SessionId,
+    project_id: ProjectId,
+    user_id: UserId,
+) -> None:
+    """
+    Creates a new session record in the database.
+    """
+    with db.begin() as conn:
+        assert conn.execute(
+            sa.insert(models.Session),
+            {
+                "session_id": str(session_id),
+                "project_id": str(project_id),
+                "user_id": str(user_id),
+            },
+        )
+
+
 def add_transcription(
     db: PersistentDatabase,
     user_id: UserId,
@@ -458,6 +478,8 @@ class AnalysisRow(BaseModel):
     transcript_context_end: TranscriptId
     summary: str
     ordinal: int
+    was_asked: bool | None = None
+    asked_at_transcript_id: str | None = None
 
 
 def get_all_ai_analyses(
@@ -478,6 +500,8 @@ def get_all_ai_analyses(
                 models.AIAnalysis.transcript_context_end,
                 models.AIAnalysis.summary,
                 models.AIAnalysis.tag,
+                models.AIAnalysis.was_asked,
+                models.AIAnalysis.asked_at_transcript_id,
                 sa.func.row_number()
                 .over(order_by=models.AIAnalysis.analysis_id.asc())
                 .label("ordinal"),
@@ -494,6 +518,8 @@ def get_all_ai_analyses(
                 subq.c.transcript_context_end,
                 subq.c.summary,
                 subq.c.tag,
+                subq.c.was_asked,
+                subq.c.asked_at_transcript_id,
                 subq.c.ordinal,
             ).order_by(subq.c.analysis_id.asc())
         ).all()
@@ -513,6 +539,8 @@ def get_all_ai_analyses(
             transcript_context_end=TranscriptId.from_str(row.transcript_context_end),  # pyright: ignore[reportAny]
             summary=row.summary,  # pyright: ignore[reportAny]
             ordinal=row.ordinal,  # pyright: ignore[reportAny]
+            was_asked=row.was_asked,  # pyright: ignore[reportAny]
+            asked_at_transcript_id=row.asked_at_transcript_id,  # pyright: ignore[reportAny]
         )
         for row in rows
     ]
@@ -542,6 +570,8 @@ def get_analyses_by_ids(
                 models.AIAnalysis.transcript_context_end,
                 models.AIAnalysis.summary,
                 models.AIAnalysis.tag,
+                models.AIAnalysis.was_asked,
+                models.AIAnalysis.asked_at_transcript_id,
                 sa.func.row_number()
                 .over(order_by=models.AIAnalysis.analysis_id.asc())
                 .label("ordinal"),
@@ -558,6 +588,8 @@ def get_analyses_by_ids(
                 subq.c.transcript_context_end,
                 subq.c.summary,
                 subq.c.tag,
+                subq.c.was_asked,
+                subq.c.asked_at_transcript_id,
                 subq.c.ordinal,
             )
             .where(subq.c.analysis_id.in_(analysis_id_strs))
@@ -580,6 +612,8 @@ def get_analyses_by_ids(
             transcript_context_end=TranscriptId.from_str(row.transcript_context_end),  # pyright: ignore[reportAny]
             summary=row.summary,  # pyright: ignore[reportAny]
             ordinal=row.ordinal,  # pyright: ignore[reportAny]
+            was_asked=row.was_asked,  # pyright: ignore[reportAny]
+            asked_at_transcript_id=row.asked_at_transcript_id,  # pyright: ignore[reportAny]
         )
         for row in rows
     }
@@ -591,7 +625,12 @@ def get_analyses_by_ids(
 
 
 def update_ai_analysis_tag(
-    db: PersistentDatabase, analysis_id: str, tag: str | None, _user_id: UserId
+    db: PersistentDatabase,
+    analysis_id: str,
+    tag: str | None,
+    _user_id: UserId,
+    was_asked: bool | None = None,
+    asked_at_transcript_id: str | None = None,
 ):
     """
     Update the tag for an AI analysis.
@@ -600,12 +639,28 @@ def update_ai_analysis_tag(
         analysis_id: The ID of the analysis to update
         tag: The new tag value ("starred", "dismissed", "starred_dismissed", or None to clear)
         _user_id: User ID (kept for API compatibility, not used as tags are project-wide)
+        was_asked: Whether the question was asked (only relevant when dismissing)
+        asked_at_transcript_id: The transcript ID where the question was asked
     """
     with db.begin() as conn:
+        update_values: dict[str, object] = {
+            "tag": tag,
+            "time_tag_changed": sa.func.now(),
+        }
+
+        # Only update answered fields if they are provided
+        if was_asked is not None:
+            update_values["was_asked"] = was_asked
+
+        if asked_at_transcript_id is None:
+            update_values["asked_at_transcript_id"] = None
+        else:
+            update_values["asked_at_transcript_id"] = asked_at_transcript_id
+
         _ = conn.execute(
             sa.update(models.AIAnalysis)
             .where(models.AIAnalysis.analysis_id == analysis_id)
-            .values(tag=tag, time_tag_changed=sa.func.now())
+            .values(**update_values)
         )
 
 

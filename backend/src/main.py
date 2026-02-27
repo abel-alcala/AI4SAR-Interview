@@ -55,7 +55,7 @@ from interview_helper.context_manager.database import (
     get_all_transcripts,
     get_all_ai_analyses,
 )
-from interview_helper.context_manager.types import ProjectId
+from interview_helper.context_manager.types import ProjectId, TranscriptId
 
 from fastapi.security import OpenIdConnect
 from fastapi import FastAPI, WebSocket, Depends, HTTPException, status
@@ -401,6 +401,8 @@ async def websocket_endpoint(
                                 message.analysis_id,
                                 message.tag,
                                 ticket.user_id,
+                                was_asked=message.was_asked,
+                                asked_at_transcript_id=message.asked_at_transcript_id,
                             )
                             # Broadcast the tag update to all sessions in this project
                             await session_manager.broadcast_to_project(
@@ -530,11 +532,24 @@ async def download_questions(
     for analysis in analyses:
         transcript_lines.append(f"Question #{analysis.ordinal}:")
         transcript_lines.append(f"\t{analysis.text}")
-        if analysis.tag:
-            transcript_lines.append(f"\tTag: {analysis.tag}")
 
         if analysis.span:
             transcript_lines.append(f'\tContext: "{analysis.span}"')
+
+        if analysis.tag and "starred" in analysis.tag:
+            transcript_lines.append("\tStarred")
+
+        if analysis.was_asked is True:
+            if analysis.asked_at_transcript_id:
+                transcript_id = TranscriptId.from_str(analysis.asked_at_transcript_id)
+                timestamp = transcript_id.get_datetime().strftime(
+                    "%Y-%m-%d %H:%M:%S %Z"
+                )
+                transcript_lines.append(f"\tAsked at {timestamp}")
+            else:
+                transcript_lines.append("\tAsked at unknown")
+        elif analysis.was_asked is False:
+            transcript_lines.append("\tNot Asked")
 
         transcript_lines.append("")
 
@@ -561,13 +576,12 @@ async def download_audio(project_id: str, token: Annotated[str, Depends(oidc_sch
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    # Get all session IDs for this project from the database
+    # Get all session IDs for this project from the Session table
     with session_manager.db.begin() as conn:
         session_ids_result = conn.execute(
-            sa.select(models.Transcription.session_id)
-            .where(models.Transcription.project_id == project_id)
-            .distinct()
-            .order_by(models.Transcription.session_id.asc())
+            sa.select(models.Session.session_id)
+            .where(models.Session.project_id == project_id)
+            .order_by(models.Session.started_at.asc())
         ).all()
         session_ids: list[str] = [row[0] for row in session_ids_result]
 

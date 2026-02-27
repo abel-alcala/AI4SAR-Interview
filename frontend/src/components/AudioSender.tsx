@@ -136,9 +136,16 @@ export function AudioSender({ projectId }: AudioSenderProps) {
         [ws],
     );
 
-    // Handle dismissing an insight
-    const handleDismissInsight = useCallback(
+    // Handle dismissing an insight as answered
+    const handleDismissAsAnswered = useCallback(
         (analysisId: string) => {
+            // Get the latest transcript ID
+            const latestTranscriptId =
+                transcriptChunks.length > 0
+                    ? transcriptChunks[transcriptChunks.length - 1]
+                          .transcription_id
+                    : null;
+
             // Send update tag message to backend
             const insight = insights.find((i) => i.analysis_id === analysisId);
             const newTag =
@@ -148,8 +155,12 @@ export function AudioSender({ projectId }: AudioSenderProps) {
             setInsights((prevState) =>
                 prevState.map((insight) => {
                     if (insight.analysis_id === analysisId) {
-                        // If it's starred, mark as starred_dismissed, otherwise just dismissed
-                        return { ...insight, tag: newTag };
+                        return {
+                            ...insight,
+                            tag: newTag,
+                            was_asked: true,
+                            asked_at_transcript_id: latestTranscriptId,
+                        };
                     }
                     return insight;
                 }),
@@ -160,6 +171,43 @@ export function AudioSender({ projectId }: AudioSenderProps) {
                 timestamp: new Date().toISOString(),
                 analysis_id: analysisId,
                 tag: newTag,
+                was_asked: true,
+                asked_at_transcript_id: latestTranscriptId,
+            });
+        },
+        [ws, insights, transcriptChunks],
+    );
+
+    // Handle dismissing an insight as not answered
+    const handleDismissNotAnswered = useCallback(
+        (analysisId: string) => {
+            // Send update tag message to backend
+            const insight = insights.find((i) => i.analysis_id === analysisId);
+            const newTag =
+                insight?.tag === "starred" ? "starred_dismissed" : "dismissed";
+
+            // Update local state immediately
+            setInsights((prevState) =>
+                prevState.map((insight) => {
+                    if (insight.analysis_id === analysisId) {
+                        return {
+                            ...insight,
+                            tag: newTag,
+                            was_asked: false,
+                            asked_at_transcript_id: null,
+                        };
+                    }
+                    return insight;
+                }),
+            );
+
+            ws.sendMessage({
+                type: MessageType.UPDATE_AI_ANALYSIS_TAG,
+                timestamp: new Date().toISOString(),
+                analysis_id: analysisId,
+                tag: newTag,
+                was_asked: false,
+                asked_at_transcript_id: null,
             });
         },
         [ws, insights],
@@ -647,7 +695,8 @@ export function AudioSender({ projectId }: AudioSenderProps) {
                         onRegisterChunkRef={handleRegisterChunkRef}
                         onStarInsight={handleStarInsight}
                         onUnstarInsight={handleUnstarInsight}
-                        onDismissInsight={handleDismissInsight}
+                        onDismissAsAnswered={handleDismissAsAnswered}
+                        onDismissNotAnswered={handleDismissNotAnswered}
                         onUndoDismiss={handleUndoDismiss}
                         onSpanClick={handleSpanClick}
                         onStartRecording={startSendingAudio}
@@ -674,7 +723,8 @@ export function AudioSender({ projectId }: AudioSenderProps) {
                         onRegisterChunkRef={handleRegisterChunkRef}
                         onStarInsight={handleStarInsight}
                         onUnstarInsight={handleUnstarInsight}
-                        onDismissInsight={handleDismissInsight}
+                        onDismissAsAnswered={handleDismissAsAnswered}
+                        onDismissNotAnswered={handleDismissNotAnswered}
                         onUndoDismiss={handleUndoDismiss}
                         onSpanClick={handleSpanClick}
                         onStartRecording={startSendingAudio}

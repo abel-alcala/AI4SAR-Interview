@@ -1,3 +1,4 @@
+from interview_helper.context_manager.database import PersistentDatabase
 from interview_helper.ai_analysis.ai_analysis import FakeAnalyzer
 from ulid import ULID
 from interview_helper.context_manager.types import ProjectId, UserId
@@ -12,8 +13,12 @@ pytestmark = pytest.mark.anyio
 
 async def test_context_manager_maintains_individual_state():
     test_resource_key = ResourceKey[str]("string")
-    contextManager1 = AppContextManager((), ai_processer=FakeAnalyzer)
-    contextManager2 = AppContextManager((), ai_processer=FakeAnalyzer)
+    contextManager1 = AppContextManager(
+        (), ai_processer=FakeAnalyzer, db=PersistentDatabase.new_in_memory()
+    )
+    contextManager2 = AppContextManager(
+        (), ai_processer=FakeAnalyzer, db=PersistentDatabase.new_in_memory()
+    )
 
     project_id = ProjectId(ULID())
 
@@ -31,7 +36,9 @@ async def test_context_manager_maintains_individual_state():
 async def test_content_manager_can_wait():
     test_resource_key1 = ResourceKey[str]("string")
     test_resource_key2 = ResourceKey[str]("string2")
-    context_manager = AppContextManager((), FakeAnalyzer)
+    context_manager = AppContextManager(
+        (), ai_processer=FakeAnalyzer, db=PersistentDatabase.new_in_memory()
+    )
     project_id = ProjectId(ULID())
 
     ctx = await context_manager.new_session(UserId(ULID()), project_id)
@@ -73,7 +80,9 @@ async def test_content_manager_can_wait():
 
 async def test_content_manager_basic_can_wait():
     test_resource_key1 = ResourceKey[str]("string")
-    context_manager = AppContextManager((), FakeAnalyzer)
+    context_manager = AppContextManager(
+        (), ai_processer=FakeAnalyzer, db=PersistentDatabase.new_in_memory()
+    )
     project_id = ProjectId(ULID())
     ctx = await context_manager.new_session(UserId(ULID()), project_id)
 
@@ -83,7 +92,9 @@ async def test_content_manager_basic_can_wait():
 
 
 async def test_get_settings():
-    cm = AppContextManager((), FakeAnalyzer)
+    cm = AppContextManager(
+        (), ai_processer=FakeAnalyzer, db=PersistentDatabase.new_in_memory()
+    )
 
     # Ensure that this causes an error so we don't inadvertently use it in tests
     with pytest.raises(AssertionError):

@@ -32,6 +32,7 @@ from interview_helper.audio_stream_handler.types import AudioChunk
 from interview_helper.context_manager.database import (
     PersistentDatabase,
     add_ai_analysis,
+    create_session,
     get_analyses_by_ids,
     get_all_transcripts_since_last_analysis,
     get_user_by_id,
@@ -142,6 +143,7 @@ class AppContextManager:
         ],
         ai_processer: type[AIAnalyzer],
         settings: Settings | None = None,
+        db: PersistentDatabase | None = None,
     ):
         # We need to protect against race-conditions since our context might end up in an
         # inconsistent state between threads.
@@ -176,7 +178,7 @@ class AppContextManager:
         self.settings = settings
         self.ticket_store = TicketStore()
 
-        self.db = PersistentDatabase()
+        self.db = db or PersistentDatabase()
 
         self.ai_processor: None | AIAnalyzer = (
             ai_processer(settings, self.db) if settings else None
@@ -194,6 +196,9 @@ class AppContextManager:
         self, user_id: UserId, project_id: ProjectId
     ) -> SessionContext:
         session_id = SessionId(ULID())
+
+        # Create session record in database
+        create_session(self.db, session_id, project_id, user_id)
 
         async with self.lock:
             self.session_data[session_id] = AppContextManager.SessionData(
