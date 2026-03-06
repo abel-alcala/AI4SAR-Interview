@@ -59,6 +59,7 @@ export interface AIResultMessage {
 export interface AnalysisRow {
     analysis_id: string;
     text: string;
+    category_code: string;
     span: string | null;
     transcript_span_id: string | null;
     is_dismissed: boolean;

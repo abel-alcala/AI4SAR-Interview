@@ -1,6 +1,15 @@
-from interview_helper.context_manager.database import get_user_by_id
-from interview_helper.context_manager.database import get_or_add_user_by_oidc_id
-from interview_helper.context_manager.database import PersistentDatabase
+from ulid import ULID
+from interview_helper.context_manager.database import (
+    PersistentDatabase,
+    add_ai_analysis,
+    add_transcription,
+    create_new_project,
+    create_session,
+    get_all_ai_analyses,
+    get_or_add_user_by_oidc_id,
+    get_user_by_id,
+)
+from interview_helper.context_manager.types import ProjectId, SessionId, TranscriptId
 import sqlalchemy as sa
 import pytest
 
@@ -46,3 +55,40 @@ def test_user_addition():
 
     assert added_user.user_id == added_user2.user_id == added_user3.user_id
     assert added_user.oidc_id == added_user2.oidc_id == added_user3.oidc_id
+
+
+def test_add_ai_analysis_normalizes_invalid_category_code_to_default():
+    db = PersistentDatabase.new_in_memory()
+    user = get_or_add_user_by_oidc_id(db, "oidc-1", "User One")
+
+    project = create_new_project(db, user.user_id, "P1")
+    project_id = ProjectId.from_str(project["id"])
+    session_id = SessionId(ULID())
+    create_session(db, session_id, project_id, user.user_id)
+
+    transcript_id = TranscriptId.from_str(
+        add_transcription(
+            db=db,
+            user_id=user.user_id,
+            session_id=session_id,
+            project_id=project_id,
+            text="Sample transcript",
+            speaker="Speaker-1",
+        )
+    )
+
+    _ = add_ai_analysis(
+        db=db,
+        project_id=project_id,
+        text="What time did they leave?",
+        category_code="INVALID",
+        span="they left at sunrise",
+        transcript_span_id=transcript_id,
+        transcript_context_start=transcript_id,
+        transcript_context_end=transcript_id,
+        summary="Summary",
+    )
+
+    rows = get_all_ai_analyses(db, project_id)
+    assert len(rows) == 1
+    assert rows[0].category_code == "P"

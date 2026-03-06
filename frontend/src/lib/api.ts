@@ -183,6 +183,43 @@ export async function downloadAudio(
 }
 
 /**
+ * Download unified report for a project
+ */
+export async function downloadReport(
+    projectId: string,
+    token: string,
+): Promise<void> {
+    const response = await fetch(
+        `${BACKEND_URL}/project/${projectId}/download/report`,
+        {
+            headers: {
+                Authorization: `Bearer ${token}`,
+            },
+        },
+    );
+
+    if (!response.ok) {
+        throw new Error(
+            `Failed to download report: ${response.status} ${response.statusText}`,
+        );
+    }
+
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download =
+        response.headers
+            .get("content-disposition")
+            ?.split("filename=")[1]
+            ?.replace(/"/g, "") || "report.pdf";
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+}
+
+/**
  * Get project info including session count
  */
 export async function getProjectInfo(

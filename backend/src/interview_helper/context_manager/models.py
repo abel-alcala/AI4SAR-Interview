@@ -80,6 +80,7 @@ class AIAnalysis(Base):
     )
 
     text: Mapped[str] = mapped_column(sa.Text, nullable=False)
+    category_code: Mapped[str] = mapped_column(sa.String(1), nullable=False)
 
     span: Mapped[str] = mapped_column(sa.Text, nullable=True)
 

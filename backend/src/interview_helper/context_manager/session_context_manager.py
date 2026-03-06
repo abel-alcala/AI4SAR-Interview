@@ -557,6 +557,7 @@ class AppContextManager:
                             self.db,
                             project_id=job.project_id,
                             text=result.question,
+                            category_code=result.category_code,
                             span=result.grounding_span,
                             transcript_span_id=transcript_span_id,
                             transcript_context_start=results.transcript_context_start,

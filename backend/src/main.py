@@ -70,6 +70,7 @@ import wave
 import tempfile
 import sqlalchemy as sa
 from interview_helper.downloads.get_transcript import generate_transcript
+from interview_helper.downloads.get_report import generate_report_pdf
 from interview_helper.context_manager import models
 
 # Configure logging
@@ -649,6 +650,35 @@ async def download_questions(
     return Response(
         content=questions_text,
         media_type="text/plain",
+        headers={"Content-Disposition": f'attachment; filename="{safe_filename}"'},
+    )
+
+
+@app.get("/project/{project_id}/download/report")
+async def download_report(project_id: str, token: Annotated[str, Depends(oidc_scheme)]):
+    """
+    Download a unified interview report for a project as a PDF
+    """
+    clean_token = token.removeprefix("Bearer ")
+    _ = verify_jwt_token(clean_token, jwks_client, CLIENT_ID, signing_algos)
+
+    project_id_typed = ProjectId.from_str(project_id)
+    project = get_project_by_id(session_manager.db, project_id_typed)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    report_pdf = generate_report_pdf(project_id=project_id, db=session_manager.db)
+    if report_pdf is None:
+        raise HTTPException(
+            status_code=404, detail="No transcriptions found for this project"
+        )
+
+    project_name = project["name"] or "report"
+    safe_filename = sanitize_filename(project_name, "report") + "_report.pdf"
+
+    return Response(
+        content=report_pdf,
+        media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{safe_filename}"'},
     )
 

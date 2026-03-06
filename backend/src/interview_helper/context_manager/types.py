@@ -121,6 +121,7 @@ class AIJob:
 class AIQuestion:
     question: str
     grounding_span: str
+    category_code: str
 
 
 @dataclass(frozen=True)

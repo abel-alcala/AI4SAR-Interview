@@ -115,6 +115,7 @@ def upgrade() -> None:
         sa.Column("analysis_id", sa.String(length=26), nullable=False),
         sa.Column("project_id", sa.String(length=26), nullable=False),
         sa.Column("text", sa.Text(), nullable=False),
+        sa.Column("category_code", sa.String(length=1), nullable=False),
         sa.Column("span", sa.Text(), nullable=True),
         sa.Column("transcript_span_id", sa.String(length=26), nullable=True),
         sa.Column("transcript_context_start", sa.String(length=26), nullable=False),

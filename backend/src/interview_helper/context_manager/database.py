@@ -9,6 +9,9 @@ from interview_helper.context_manager.types import (
     SessionId,
     TranscriptId,
 )
+from interview_helper.context_manager.question_categories import (
+    normalize_question_category_code,
+)
 from interview_helper.context_manager.types import UserId
 from alembic.config import Config
 from alembic import command
@@ -510,6 +513,7 @@ def get_project_creator_and_name(
 class AnalysisRow(BaseModel):
     analysis_id: str
     text: str
+    category_code: str
     span: str | None
     transcript_span_id: TranscriptId | None
     tag: Literal["starred", "dismissed", "starred_dismissed"] | None
@@ -533,6 +537,7 @@ def get_all_ai_analyses(
             sa.select(
                 models.AIAnalysis.analysis_id,
                 models.AIAnalysis.text,
+                models.AIAnalysis.category_code,
                 models.AIAnalysis.span,
                 models.AIAnalysis.transcript_span_id,
                 models.AIAnalysis.transcript_context_start,
@@ -551,6 +556,7 @@ def get_all_ai_analyses(
             sa.select(
                 subq.c.analysis_id,
                 subq.c.text,
+                subq.c.category_code,
                 subq.c.span,
                 subq.c.transcript_span_id,
                 subq.c.transcript_context_start,
@@ -567,6 +573,7 @@ def get_all_ai_analyses(
         AnalysisRow(
             analysis_id=row.analysis_id,  # pyright: ignore[reportAny]
             text=row.text,  # pyright: ignore[reportAny]
+            category_code=row.category_code,  # pyright: ignore[reportAny]
             span=row.span,  # pyright: ignore[reportAny]
             transcript_span_id=TranscriptId.from_str(row.transcript_span_id)  # pyright: ignore[reportAny]
             if row.transcript_span_id  # pyright: ignore[reportAny]
@@ -603,6 +610,7 @@ def get_analyses_by_ids(
             sa.select(
                 models.AIAnalysis.analysis_id,
                 models.AIAnalysis.text,
+                models.AIAnalysis.category_code,
                 models.AIAnalysis.span,
                 models.AIAnalysis.transcript_span_id,
                 models.AIAnalysis.transcript_context_start,
@@ -621,6 +629,7 @@ def get_analyses_by_ids(
             sa.select(
                 subq.c.analysis_id,
                 subq.c.text,
+                subq.c.category_code,
                 subq.c.span,
                 subq.c.transcript_span_id,
                 subq.c.transcript_context_start,
@@ -640,6 +649,7 @@ def get_analyses_by_ids(
         row.analysis_id: AnalysisRow(  # pyright: ignore[reportAny]
             analysis_id=row.analysis_id,  # pyright: ignore[reportAny]
             text=row.text,  # pyright: ignore[reportAny]
+            category_code=row.category_code,  # pyright: ignore[reportAny]
             span=row.span,  # pyright: ignore[reportAny]
             tag=row.tag,  # pyright: ignore[reportAny]
             transcript_context_start=TranscriptId.from_str(
@@ -707,6 +717,7 @@ def add_ai_analysis(
     db: PersistentDatabase,
     project_id: ProjectId,
     text: str,
+    category_code: str,
     span: str | None,
     transcript_span_id: TranscriptId | None,
     transcript_context_start: TranscriptId,
@@ -717,6 +728,7 @@ def add_ai_analysis(
     Adds a transcription result, returns the analysis ID
     """
     analysis_id = str(ULID()).lower()
+    normalized_category_code = normalize_question_category_code(category_code)
     with db.begin() as conn:
         assert conn.execute(
             sa.insert(models.AIAnalysis),
@@ -724,6 +736,7 @@ def add_ai_analysis(
                 "analysis_id": analysis_id,
                 "project_id": str(project_id),
                 "text": text,
+                "category_code": normalized_category_code,
                 "span": span,
                 "transcript_span_id": str(transcript_span_id)
                 if transcript_span_id

@@ -163,6 +163,7 @@ async def run_analysis(
                 db,
                 project_id=project,
                 text=result.question,
+                category_code=result.category_code,
                 span=result.grounding_span,
                 transcript_span_id=None,
                 transcript_context_start=analysis_results.transcript_context_start,

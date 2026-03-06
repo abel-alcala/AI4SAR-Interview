@@ -18,6 +18,10 @@ from interview_helper.context_manager.types import (
     ProjectId,
     TranscriptId,
 )
+from interview_helper.context_manager.question_categories import (
+    QUESTION_CATEGORIES,
+    normalize_question_category_code,
+)
 from langchain_openai import AzureChatOpenAI
 from langchain.tools import ToolRuntime, tool  # pyright: ignore[reportUnknownVariableType]
 from langchain.agents import create_agent  # pyright: ignore[reportUnknownVariableType]
@@ -40,6 +44,7 @@ logger = logging.getLogger(__name__)
 class Question(BaseModel):
     question: str
     grounding_span: str
+    category_code: str
 
 
 class Analysis(BaseModel):
@@ -55,7 +60,11 @@ class ProjectContext:
 class SimpleAnalyzer:
     """Simple LLM-based interview analyzer."""
 
-    SYSTEM_PROMPT: str = dedent("""\
+    CATEGORY_PROMPT_BLOCK: str = "\n".join(
+        [f"   - {code}: {label}" for code, label in QUESTION_CATEGORIES]
+    )
+
+    SYSTEM_PROMPT: str = dedent(f"""\
         ROLE: Interview Follow-Up Generator for SAR Profiles
 
         You will receive a chunk of transcript from an in-depth profile interview for a Search and Rescue operation.
@@ -79,7 +88,11 @@ class SimpleAnalyzer:
         7) Output: ONE to THREE questions, each with:
             - question (string)
             - grounding_span (short verbatim quote from the transcript)
+            - category_code (single letter in B-W from list below)
            As well as a brief summary of the entire situation so far, based on your knowledge.
+
+        Category codes:
+{CATEGORY_PROMPT_BLOCK}
 
         ALWAYS use the provided TOOLS to check for duplicates or 
         gather more context from the transcript history before finalizing your questions.
@@ -246,6 +259,7 @@ class SimpleAnalyzer:
                 AIQuestion(
                     question=q.question,
                     grounding_span=clean_grounding_span(q.grounding_span),
+                    category_code=normalize_question_category_code(q.category_code),
                 )
                 for q in analysis.questions
             ]
