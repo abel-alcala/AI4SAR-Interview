@@ -20,9 +20,9 @@ docker compose up
 
 ## Development Installation
 
-### 1. Backend Environment Setup
+### 1. Environment Setup
 
-Copy the .env.example to .env, add the required environment variables.
+Copy the .env.example to .env in both `frontend/` and `backend/`, fill in the required environment variables.
 
 ### 2. Backend Setup
 
