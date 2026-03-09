@@ -30,6 +30,9 @@ from interview_helper.context_manager.question_categories import (
 from interview_helper.context_manager.types import ProjectId, TranscriptId
 from interview_helper.downloads.util import extract_timestamp_from_ulid
 
+# Time window for transcript excerpts before answered questions
+TRANSCRIPT_EXCERPT_WINDOW = timedelta(minutes=1)
+
 
 @dataclass
 class ReportQuestionEntry:
@@ -42,6 +45,7 @@ class ReportQuestionEntry:
     context_anchor: str | None
     answered_at_anchor: str | None
     answered_at_text: str | None
+    transcript_excerpt: str | None = None
 
 
 @dataclass
@@ -230,12 +234,30 @@ def build_report_data(project_id: str, db: PersistentDatabase) -> ReportData | N
 
         answered_anchor: str | None = None
         answered_at_text: str | None = None
+        transcript_excerpt: str | None = None
 
         if analysis.asked_at_transcript_id is not None:
             asked_at_id = analysis.asked_at_transcript_id.lower()
             answered_anchor = anchor_index.chunk_to_section_anchor.get(asked_at_id)
             asked_at_timestamp = TranscriptId.from_str(asked_at_id).get_datetime()
             answered_at_text = _format_utc(asked_at_timestamp)
+
+            # Build transcript excerpt from past minute before question was answered
+            excerpt_parts: list[str] = []
+            excerpt_start_time = asked_at_timestamp - TRANSCRIPT_EXCERPT_WINDOW
+
+            for row in transcript_rows:
+                row_id = str(row["transcription_id"])
+                row_timestamp = extract_timestamp_from_ulid(row_id)
+
+                if excerpt_start_time <= row_timestamp < asked_at_timestamp:
+                    speaker = str(row["speaker"] or "Unknown")
+                    text = str(row["text_output"] or "").strip()
+                    if text:
+                        excerpt_parts.append(f"{speaker}: {text}")
+
+            if excerpt_parts:
+                transcript_excerpt = " ".join(excerpt_parts)
 
         question_anchor = f"question-{analysis.ordinal}"
 
@@ -251,6 +273,7 @@ def build_report_data(project_id: str, db: PersistentDatabase) -> ReportData | N
             ),
             answered_at_anchor=answered_anchor,
             answered_at_text=answered_at_text,
+            transcript_excerpt=transcript_excerpt,
         )
 
         if analysis.was_asked is True:
@@ -350,6 +373,14 @@ def _render_question_sections(
                         )
                     )
 
+            if entry.transcript_excerpt:
+                story.append(
+                    Paragraph(
+                        f'<font color="#999999"><i>Transcript Excerpt:</i> {escape(entry.transcript_excerpt)}</font>',
+                        question_style,
+                    )
+                )
+
             story.append(Spacer(1, 0.12 * inch))
 
         story.append(Spacer(1, 0.08 * inch))
@@ -416,12 +447,12 @@ def generate_report_pdf(project_id: str, db: PersistentDatabase) -> bytes | None
     # Cover page
     story.append(Spacer(1, 1.5 * inch))
     story.append(
-        Paragraph('<font color="#1a472a"><b>Interview Prep</b></font>', title_style)
+        Paragraph('<font color="#1a472a"><b>Interview Report</b></font>', title_style)
     )
     story.append(Spacer(1, 0.1 * inch))
     story.append(
         Paragraph(
-            f'<font color="#2E5090" size="24"><b>{escape(report_data.project_name)}</b></font>',
+            f'<font color="#2E5090" size="24"><b>Project: {escape(report_data.project_name)}</b></font>',
             ParagraphStyle(
                 "ProjectTitle",
                 parent=title_style,

@@ -2,7 +2,7 @@ from typing import Final
 
 # Missing "A" is intentional; category list starts at "B".
 QUESTION_CATEGORIES: Final[tuple[tuple[str, str], ...]] = (
-    ("B", "Source Information (person being interviewed)"),
+    ("B", "Source Information"),
     ("C", "General Missing Person Information"),
     ("D", "Physical Description"),
     ("E", "Clothing"),
