@@ -216,6 +216,56 @@ def _analysis_context_anchor(
     return chunk_to_section_anchor.get(str(analysis.transcript_context_end))
 
 
+def _build_transcript_excerpt(
+    transcript_rows: Sequence[TranscriptionWithProjectDetails],
+    asked_at_timestamp: datetime,
+) -> str | None:
+    excerpt_start_time = asked_at_timestamp - TRANSCRIPT_EXCERPT_WINDOW
+    excerpt_rows: list[tuple[str, str]] = []
+
+    for row in transcript_rows:
+        row_timestamp = extract_timestamp_from_ulid(str(row["transcription_id"]))
+        if not (excerpt_start_time <= row_timestamp < asked_at_timestamp):
+            continue
+
+        speaker = str(row["speaker"] or "Unknown Speaker")
+        text = str(row["text_output"] or "").strip()
+        if text:
+            excerpt_rows.append((speaker, text))
+
+    if len(excerpt_rows) == 0:
+        return None
+
+    grouped_lines: list[str] = []
+    current_speaker: str | None = None
+    current_texts: list[str] = []
+
+    def flush_current() -> None:
+        nonlocal current_speaker, current_texts
+        if current_speaker is None or len(current_texts) == 0:
+            return
+        grouped_lines.append(f"{current_speaker}: {' '.join(current_texts)}")
+        current_speaker = None
+        current_texts = []
+
+    for speaker, text in excerpt_rows:
+        if current_speaker is None:
+            current_speaker = speaker
+            current_texts = [text]
+            continue
+
+        if speaker == current_speaker:
+            current_texts.append(text)
+            continue
+
+        flush_current()
+        current_speaker = speaker
+        current_texts = [text]
+
+    flush_current()
+    return "\n".join(grouped_lines) if grouped_lines else None
+
+
 def build_report_data(project_id: str, db: PersistentDatabase) -> ReportData | None:
     typed_project_id = ProjectId.from_str(project_id)
 
@@ -241,23 +291,9 @@ def build_report_data(project_id: str, db: PersistentDatabase) -> ReportData | N
             answered_anchor = anchor_index.chunk_to_section_anchor.get(asked_at_id)
             asked_at_timestamp = TranscriptId.from_str(asked_at_id).get_datetime()
             answered_at_text = _format_utc(asked_at_timestamp)
-
-            # Build transcript excerpt from past minute before question was answered
-            excerpt_parts: list[str] = []
-            excerpt_start_time = asked_at_timestamp - TRANSCRIPT_EXCERPT_WINDOW
-
-            for row in transcript_rows:
-                row_id = str(row["transcription_id"])
-                row_timestamp = extract_timestamp_from_ulid(row_id)
-
-                if excerpt_start_time <= row_timestamp < asked_at_timestamp:
-                    speaker = str(row["speaker"] or "Unknown")
-                    text = str(row["text_output"] or "").strip()
-                    if text:
-                        excerpt_parts.append(f"{speaker}: {text}")
-
-            if excerpt_parts:
-                transcript_excerpt = " ".join(excerpt_parts)
+            transcript_excerpt = _build_transcript_excerpt(
+                transcript_rows, asked_at_timestamp
+            )
 
         question_anchor = f"question-{analysis.ordinal}"
 
@@ -313,6 +349,7 @@ def _render_question_sections(
     heading_style: ParagraphStyle,
     category_style: ParagraphStyle,
     question_style: ParagraphStyle,
+    excerpt_style: ParagraphStyle,
 ) -> None:
     story.append(Paragraph(escape(title), heading_style))
     story.append(Spacer(1, 0.15 * inch))
@@ -374,10 +411,18 @@ def _render_question_sections(
                     )
 
             if entry.transcript_excerpt:
+                formatted_excerpt = "... " + escape(entry.transcript_excerpt).replace(
+                    "\n", "<br/>"
+                )
+                excerpt_label = (
+                    f'<a href="#{entry.answered_at_anchor}" color="#666666"><u>Transcript Excerpt</u></a>'
+                    if entry.answered_at_anchor
+                    else "Transcript Excerpt"
+                )
                 story.append(
                     Paragraph(
-                        f'<font color="#999999"><i>Transcript Excerpt:</i> {escape(entry.transcript_excerpt)}</font>',
-                        question_style,
+                        f'<font color="#666666"><i>{excerpt_label}:</i></font> {formatted_excerpt}',
+                        excerpt_style,
                     )
                 )
 
@@ -441,6 +486,17 @@ def generate_report_pdf(project_id: str, db: PersistentDatabase) -> bytes | None
         textColor=colors.HexColor("#555555"),
         spaceAfter=6,
     )
+    excerpt_style = ParagraphStyle(
+        "ExcerptStyle",
+        parent=normal_style,
+        fontSize=10,
+        leading=12,
+        leftIndent=36,
+        rightIndent=12,
+        textColor=colors.HexColor("#666666"),
+        spaceBefore=6,
+        spaceAfter=4,
+    )
 
     story: list[Flowable] = []
 
@@ -485,6 +541,7 @@ def generate_report_pdf(project_id: str, db: PersistentDatabase) -> bytes | None
         heading_style,
         category_style,
         question_style,
+        excerpt_style,
     )
     story.append(PageBreak())
 
@@ -535,6 +592,7 @@ def generate_report_pdf(project_id: str, db: PersistentDatabase) -> bytes | None
         heading_style,
         category_style,
         question_style,
+        excerpt_style,
     )
 
     document.build(story)
