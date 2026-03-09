@@ -8,6 +8,7 @@ from collections.abc import Sequence
 from typing import cast
 from xml.sax.saxutils import escape
 
+from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import inch
@@ -287,6 +288,8 @@ def _render_question_sections(
     grouped_questions: dict[str, list[ReportQuestionEntry]],
     normal_style: ParagraphStyle,
     heading_style: ParagraphStyle,
+    category_style: ParagraphStyle,
+    question_style: ParagraphStyle,
 ) -> None:
     story.append(Paragraph(escape(title), heading_style))
     story.append(Spacer(1, 0.15 * inch))
@@ -300,17 +303,17 @@ def _render_question_sections(
         category_label = QUESTION_CATEGORY_LABELS.get(category_code, "Unknown")
         story.append(
             Paragraph(
-                f"<b>{escape(category_code)}.</b> {escape(category_label)}",
-                normal_style,
+                f'<font color="#2E5090"><b>{escape(category_code)}.</b> {escape(category_label)}</font>',
+                category_style,
             )
         )
-        story.append(Spacer(1, 0.08 * inch))
+        story.append(Spacer(1, 0.12 * inch))
 
         for entry in entries:
             story.append(
                 Paragraph(
-                    f'<a name="{entry.question_anchor}"/><b>Q{entry.ordinal}.</b> {escape(entry.text)}',
-                    normal_style,
+                    f'<a name="{entry.question_anchor}"/><font color="#1a472a"><b>Q{entry.ordinal}.</b></font> {escape(entry.text)}',
+                    question_style,
                 )
             )
 
@@ -319,30 +322,37 @@ def _render_question_sections(
                 if entry.context_anchor:
                     story.append(
                         Paragraph(
-                            f'Context: <a href="#{entry.context_anchor}">"{escaped_span}"</a>',
-                            normal_style,
+                            f'<font color="#555555"><i>Context:</i></font> <a href="#{entry.context_anchor}" color="blue"><u>"{escaped_span}"</u></a>',
+                            question_style,
                         )
                     )
                 else:
-                    story.append(Paragraph(f'Context: "{escaped_span}"', normal_style))
+                    story.append(
+                        Paragraph(
+                            f'<font color="#555555"><i>Context:</i> "{escaped_span}"</font>',
+                            question_style,
+                        )
+                    )
 
             if entry.answered_at_text is not None:
                 if entry.answered_at_anchor:
                     story.append(
                         Paragraph(
-                            f'Answered At: <a href="#{entry.answered_at_anchor}">{escape(entry.answered_at_text)}</a>',
-                            normal_style,
+                            f'<font color="#555555"><i>Answered At:</i></font> <a href="#{entry.answered_at_anchor}" color="blue"><u>{escape(entry.answered_at_text)}</u></a>',
+                            question_style,
                         )
                     )
                 else:
                     story.append(
                         Paragraph(
-                            f"Answered At: {escape(entry.answered_at_text)}",
-                            normal_style,
+                            f'<font color="#555555"><i>Answered At:</i> {escape(entry.answered_at_text)}</font>',
+                            question_style,
                         )
                     )
 
-            story.append(Spacer(1, 0.08 * inch))
+            story.append(Spacer(1, 0.12 * inch))
+
+        story.append(Spacer(1, 0.08 * inch))
 
 
 def generate_report_pdf(project_id: str, db: PersistentDatabase) -> bytes | None:
@@ -363,24 +373,74 @@ def generate_report_pdf(project_id: str, db: PersistentDatabase) -> bytes | None
 
     styles = getSampleStyleSheet()
     title_style = cast(ParagraphStyle, styles["Title"])
+    title_style.textColor = colors.HexColor("#1a472a")
+    title_style.fontSize = 36
+    title_style.leading = 42
+
     heading_style = cast(ParagraphStyle, styles["Heading2"])
+    heading_style.textColor = colors.HexColor("#2E5090")
+    heading_style.fontSize = 18
+    heading_style.spaceAfter = 6
+
     normal_style = cast(ParagraphStyle, styles["BodyText"])
+    normal_style.fontSize = 11
+
+    # Custom styles for categories and questions
+    category_style = ParagraphStyle(
+        "CategoryStyle",
+        parent=normal_style,
+        fontSize=13,
+        textColor=colors.HexColor("#2E5090"),
+        spaceAfter=8,
+        spaceBefore=4,
+    )
+
+    question_style = ParagraphStyle(
+        "QuestionStyle",
+        parent=normal_style,
+        fontSize=11,
+        leftIndent=20,
+        spaceAfter=4,
+    )
+
+    subtitle_style = ParagraphStyle(
+        "SubtitleStyle",
+        parent=normal_style,
+        fontSize=13,
+        textColor=colors.HexColor("#555555"),
+        spaceAfter=6,
+    )
 
     story: list[Flowable] = []
 
     # Cover page
-    story.append(Paragraph(escape(report_data.project_name), title_style))
-    story.append(Spacer(1, 0.35 * inch))
+    story.append(Spacer(1, 1.5 * inch))
+    story.append(
+        Paragraph('<font color="#1a472a"><b>Interview Prep</b></font>', title_style)
+    )
+    story.append(Spacer(1, 0.1 * inch))
     story.append(
         Paragraph(
-            f"Interview Start: {_format_utc(report_data.start_time)}",
-            normal_style,
+            f'<font color="#2E5090" size="24"><b>{escape(report_data.project_name)}</b></font>',
+            ParagraphStyle(
+                "ProjectTitle",
+                parent=title_style,
+                fontSize=24,
+                textColor=colors.HexColor("#2E5090"),
+            ),
+        )
+    )
+    story.append(Spacer(1, 0.5 * inch))
+    story.append(
+        Paragraph(
+            f'<font color="#555555"><b>Interview Start:</b> {_format_utc(report_data.start_time)}</font>',
+            subtitle_style,
         )
     )
     story.append(
         Paragraph(
-            f"Total Interview Length: {_format_duration_hms(report_data.total_duration)}",
-            normal_style,
+            f'<font color="#555555"><b>Total Interview Length:</b> {_format_duration_hms(report_data.total_duration)}</font>',
+            subtitle_style,
         )
     )
     story.append(PageBreak())
@@ -392,6 +452,8 @@ def generate_report_pdf(project_id: str, db: PersistentDatabase) -> bytes | None
         report_data.answered_by_category,
         normal_style,
         heading_style,
+        category_style,
+        question_style,
     )
     story.append(PageBreak())
 
@@ -404,7 +466,7 @@ def generate_report_pdf(project_id: str, db: PersistentDatabase) -> bytes | None
         transcript_heading = f"[{_format_utc(section.started_at)}] {speaker}"
         story.append(
             Paragraph(
-                f'<a name="{section.anchor}"/><b>{escape(transcript_heading)}</b>',
+                f'<a name="{section.anchor}"/><font color="#2E5090"><b>{escape(transcript_heading)}</b></font>',
                 normal_style,
             )
         )
@@ -418,11 +480,16 @@ def generate_report_pdf(project_id: str, db: PersistentDatabase) -> bytes | None
         if section.answered_question_refs:
             links = ", ".join(
                 [
-                    f'<a href="#{question_anchor}">Q{ordinal}</a>'
+                    f'<a href="#{question_anchor}" color="blue"><u>Q{ordinal}</u></a>'
                     for ordinal, question_anchor in section.answered_question_refs
                 ]
             )
-            story.append(Paragraph(f"Answered Here: {links}", normal_style))
+            story.append(
+                Paragraph(
+                    f'<font color="#555555"><i>Answered Here:</i></font> {links}',
+                    normal_style,
+                )
+            )
 
         story.append(Spacer(1, 0.1 * inch))
 
@@ -435,6 +502,8 @@ def generate_report_pdf(project_id: str, db: PersistentDatabase) -> bytes | None
         report_data.unanswered_by_category,
         normal_style,
         heading_style,
+        category_style,
+        question_style,
     )
 
     document.build(story)
