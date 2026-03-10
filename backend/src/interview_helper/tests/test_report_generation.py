@@ -12,7 +12,7 @@ from interview_helper.context_manager.database import (
     create_new_project,
     create_session,
     get_or_add_user_by_oidc_id,
-    update_ai_analysis_tag,
+    mark_ai_analysis_asked,
 )
 from interview_helper.context_manager.types import (
     ProjectId,
@@ -128,14 +128,18 @@ def test_build_report_data_groups_questions_and_creates_bidirectional_anchors():
     )
     _ = unanswered_analysis_id
 
-    update_ai_analysis_tag(
+    _ = mark_ai_analysis_asked(
         db,
         analysis_id=str(answered_analysis_id),
-        tag="dismissed",
-        _user_id=user.user_id,
-        was_asked=True,
         asked_at_transcript_id=transcript_3,
     )
+    explicit_asked_at = t1 + timedelta(seconds=30)
+    with db.begin() as conn:
+        _ = conn.execute(
+            sa.update(models.AIAnalysis)
+            .where(models.AIAnalysis.analysis_id == str(answered_analysis_id))
+            .values(asked_at=explicit_asked_at)
+        )
 
     report = build_report_data(project["id"], db)
     assert report is not None
@@ -153,6 +157,11 @@ def test_build_report_data_groups_questions_and_creates_bidirectional_anchors():
     answered_entry = answered[0]
     assert answered_entry.context_anchor == "transcript-1"
     assert answered_entry.answered_at_anchor == "transcript-2"
+    assert answered_entry.answered_at_text == "2026-01-01 10:02:30 UTC"
+    assert answered_entry.transcript_excerpt is not None
+    assert (
+        "Speaker-A: He was carrying a blue jacket." in answered_entry.transcript_excerpt
+    )
 
     transcript_section = report.transcript_sections[1]
     assert len(transcript_section.answered_question_refs) == 1

@@ -8,8 +8,14 @@ from interview_helper.context_manager.database import (
     get_all_ai_analyses,
     get_or_add_user_by_oidc_id,
     get_user_by_id,
+    mark_ai_analysis_asked,
+    mark_ai_analysis_dismissed_not_asked,
+    star_ai_analysis,
+    unstar_ai_analysis,
+    undo_ai_analysis_dismissal,
 )
 from interview_helper.context_manager.types import ProjectId, SessionId, TranscriptId
+from datetime import datetime, timezone
 import sqlalchemy as sa
 import pytest
 
@@ -92,3 +98,125 @@ def test_add_ai_analysis_normalizes_invalid_category_code_to_default():
     rows = get_all_ai_analyses(db, project_id)
     assert len(rows) == 1
     assert rows[0].category_code == "P"
+
+
+def test_mark_ai_analysis_actions_update_tag_and_asked_fields():
+    db = PersistentDatabase.new_in_memory()
+    user = get_or_add_user_by_oidc_id(db, "oidc-asked-at", "Asked At User")
+
+    project = create_new_project(db, user.user_id, "P2")
+    project_id = ProjectId.from_str(project["id"])
+    session_id = SessionId(ULID())
+    create_session(db, session_id, project_id, user.user_id)
+
+    transcript_id = add_transcription(
+        db=db,
+        user_id=user.user_id,
+        session_id=session_id,
+        project_id=project_id,
+        text="Transcript chunk",
+        speaker="Speaker-1",
+    )
+
+    analysis_id = add_ai_analysis(
+        db=db,
+        project_id=project_id,
+        text="Question?",
+        category_code="P",
+        span=None,
+        transcript_span_id=TranscriptId.from_str(transcript_id),
+        transcript_context_start=TranscriptId.from_str(transcript_id),
+        transcript_context_end=TranscriptId.from_str(transcript_id),
+        summary="Summary",
+    )
+
+    current_datetime = datetime.now(timezone.utc)
+
+    _ = mark_ai_analysis_asked(
+        db=db, analysis_id=str(analysis_id), asked_at_transcript_id=transcript_id
+    )
+
+    rows = get_all_ai_analyses(db, project_id)
+    assert len(rows) == 1
+    asked_row = rows[0]
+    assert asked_row.was_asked is True
+    assert asked_row.asked_at_transcript_id == transcript_id
+    assert asked_row.asked_at is not None, "asked_at should be set when marked as asked"
+    assert asked_row.asked_at >= current_datetime, (
+        "asked_at should be at least the time before the 'mark as asked'"
+    )
+
+    _ = undo_ai_analysis_dismissal(db=db, analysis_id=str(analysis_id))
+    _ = star_ai_analysis(db=db, analysis_id=str(analysis_id))
+    _ = mark_ai_analysis_dismissed_not_asked(db=db, analysis_id=str(analysis_id))
+    rows_after_clear = get_all_ai_analyses(db, project_id)
+    assert len(rows_after_clear) == 1
+    cleared_row = rows_after_clear[0]
+    assert cleared_row.tag == "starred_dismissed"
+    assert cleared_row.was_asked is False
+    assert cleared_row.asked_at_transcript_id is None
+    assert cleared_row.asked_at is None
+
+    _ = undo_ai_analysis_dismissal(db=db, analysis_id=str(analysis_id))
+    rows_after_undo = get_all_ai_analyses(db, project_id)
+    assert len(rows_after_undo) == 1
+    undone_row = rows_after_undo[0]
+    assert undone_row.tag == "starred"
+    assert undone_row.was_asked is None
+    assert undone_row.asked_at_transcript_id is None
+    assert undone_row.asked_at is None
+
+    _ = unstar_ai_analysis(db=db, analysis_id=str(analysis_id))
+    rows_after_unstar = get_all_ai_analyses(db, project_id)
+    assert len(rows_after_unstar) == 1
+    unstarred_row = rows_after_unstar[0]
+    assert unstarred_row.tag is None
+
+
+def test_mark_ai_analysis_actions_validate_invalid_transitions():
+    db = PersistentDatabase.new_in_memory()
+    user = get_or_add_user_by_oidc_id(db, "oidc-validate-tags", "Validate User")
+
+    project = create_new_project(db, user.user_id, "P3")
+    project_id = ProjectId.from_str(project["id"])
+    session_id = SessionId(ULID())
+    create_session(db, session_id, project_id, user.user_id)
+
+    transcript_id = add_transcription(
+        db=db,
+        user_id=user.user_id,
+        session_id=session_id,
+        project_id=project_id,
+        text="Transcript chunk",
+        speaker="Speaker-1",
+    )
+
+    analysis_id = add_ai_analysis(
+        db=db,
+        project_id=project_id,
+        text="Question?",
+        category_code="P",
+        span=None,
+        transcript_span_id=TranscriptId.from_str(transcript_id),
+        transcript_context_start=TranscriptId.from_str(transcript_id),
+        transcript_context_end=TranscriptId.from_str(transcript_id),
+        summary="Summary",
+    )
+
+    with pytest.raises(ValueError):
+        _ = unstar_ai_analysis(db=db, analysis_id=str(analysis_id))
+
+    with pytest.raises(ValueError):
+        _ = undo_ai_analysis_dismissal(db=db, analysis_id=str(analysis_id))
+
+    _ = mark_ai_analysis_dismissed_not_asked(db=db, analysis_id=str(analysis_id))
+
+    with pytest.raises(ValueError):
+        _ = star_ai_analysis(db=db, analysis_id=str(analysis_id))
+
+    with pytest.raises(ValueError):
+        _ = mark_ai_analysis_asked(
+            db=db,
+            analysis_id=str(analysis_id),
+            asked_at_transcript_id=transcript_id,
+        )

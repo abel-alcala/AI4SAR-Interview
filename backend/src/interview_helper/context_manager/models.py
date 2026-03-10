@@ -19,7 +19,7 @@ class User(Base):
     full_name: Mapped[str] = mapped_column(sa.String(100), nullable=False, unique=True)
     oidc_id: Mapped[str] = mapped_column(sa.String(255), nullable=False, unique=True)
     updated_at: Mapped[DateTime] = mapped_column(
-        sa.DateTime,
+        sa.DateTime(timezone=True),
         nullable=False,
         server_default=sa.func.now(),
         onupdate=sa.func.now(),
@@ -42,10 +42,10 @@ class Transcription(Base):
     text_output: Mapped[str] = mapped_column(sa.Text, nullable=True)
     speaker: Mapped[str] = mapped_column(sa.String(100), nullable=True)
     created_at: Mapped[DateTime] = mapped_column(
-        sa.DateTime, nullable=False, server_default=sa.func.now()
+        sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()
     )
     updated_at: Mapped[DateTime] = mapped_column(
-        sa.DateTime,
+        sa.DateTime(timezone=True),
         nullable=False,
         server_default=sa.func.now(),
         onupdate=sa.func.now(),
@@ -65,9 +65,11 @@ class Session(Base):
         sa.String(26), ForeignKey("users.user_id"), nullable=False
     )
     started_at: Mapped[DateTime] = mapped_column(
-        sa.DateTime, nullable=False, server_default=sa.func.now()
+        sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()
     )
-    ended_at: Mapped[DateTime | None] = mapped_column(sa.DateTime, nullable=True)
+    ended_at: Mapped[DateTime | None] = mapped_column(
+        sa.DateTime(timezone=True), nullable=True
+    )
 
 
 class AIAnalysis(Base):
@@ -100,13 +102,16 @@ class AIAnalysis(Base):
     tag: Mapped[str | None] = mapped_column(sa.String(50), nullable=True)
 
     time_tag_changed: Mapped[DateTime | None] = mapped_column(
-        sa.DateTime, nullable=True
+        sa.DateTime(timezone=True), nullable=True
     )
 
     # Fields for tracking if the question was asked
     was_asked: Mapped[bool | None] = mapped_column(sa.Boolean, nullable=True)
     asked_at_transcript_id: Mapped[str | None] = mapped_column(
         sa.String(26), ForeignKey("transcriptions.transcription_id"), nullable=True
+    )
+    asked_at: Mapped[DateTime | None] = mapped_column(
+        sa.DateTime(timezone=True), nullable=True
     )
 
 
@@ -122,11 +127,11 @@ class Project(Base):
     )
 
     created_at: Mapped[DateTime] = mapped_column(
-        sa.DateTime, nullable=False, server_default=sa.func.now()
+        sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()
     )
 
     updated_at: Mapped[DateTime] = mapped_column(
-        sa.DateTime,
+        sa.DateTime(timezone=True),
         nullable=False,
         server_default=sa.func.now(),
         onupdate=sa.func.now(),

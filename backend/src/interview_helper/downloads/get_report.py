@@ -27,7 +27,7 @@ from interview_helper.context_manager.question_categories import (
     QUESTION_CATEGORY_ORDER,
     normalize_question_category_code,
 )
-from interview_helper.context_manager.types import ProjectId, TranscriptId
+from interview_helper.context_manager.types import ProjectId
 from interview_helper.downloads.util import extract_timestamp_from_ulid
 
 # Time window for transcript excerpts before answered questions
@@ -286,13 +286,15 @@ def build_report_data(project_id: str, db: PersistentDatabase) -> ReportData | N
         answered_at_text: str | None = None
         transcript_excerpt: str | None = None
 
-        if analysis.asked_at_transcript_id is not None:
+        if analysis.asked_at is not None:
+            assert analysis.asked_at_transcript_id, (
+                "asked_at_transcript_id should be set if asked_at is set"
+            )
             asked_at_id = analysis.asked_at_transcript_id.lower()
             answered_anchor = anchor_index.chunk_to_section_anchor.get(asked_at_id)
-            asked_at_timestamp = TranscriptId.from_str(asked_at_id).get_datetime()
-            answered_at_text = _format_utc(asked_at_timestamp)
+            answered_at_text = _format_utc(analysis.asked_at)
             transcript_excerpt = _build_transcript_excerpt(
-                transcript_rows, asked_at_timestamp
+                transcript_rows, analysis.asked_at
             )
 
         question_anchor = f"question-{analysis.ordinal}"

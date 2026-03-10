@@ -1,5 +1,5 @@
 from collections.abc import Sequence
-from datetime import datetime
+from datetime import datetime, timezone
 from pydantic import BaseModel
 from sqlalchemy.sql.sqltypes import DateTime
 from typing import Literal, TypedDict
@@ -523,6 +523,64 @@ class AnalysisRow(BaseModel):
     ordinal: int
     was_asked: bool | None = None
     asked_at_transcript_id: str | None = None
+    asked_at: datetime | None = None
+
+
+type AnalysisTag = Literal["starred", "dismissed", "starred_dismissed"] | None
+
+
+@dataclass
+class AnalysisTagUpdateResult:
+    analysis_id: str
+    tag: AnalysisTag
+    was_asked: bool | None
+    asked_at_transcript_id: str | None
+
+
+def _get_ai_analysis_state_for_update(
+    conn: sa.Connection, analysis_id: str
+) -> tuple[AnalysisTag, bool | None, str | None]:
+    row = conn.execute(
+        sa.select(
+            models.AIAnalysis.tag,
+            models.AIAnalysis.was_asked,
+            models.AIAnalysis.asked_at_transcript_id,
+        ).where(models.AIAnalysis.analysis_id == analysis_id)
+    ).one_or_none()
+
+    if row is None:
+        raise ValueError(f"analysis_id {analysis_id} was not found")
+
+    return row.tag, row.was_asked, row.asked_at_transcript_id  # pyright: ignore[reportAny]
+
+
+def _persist_ai_analysis_state(
+    conn: sa.Connection,
+    *,
+    analysis_id: str,
+    tag: AnalysisTag,
+    was_asked: bool | None,
+    asked_at_transcript_id: str | None,
+    asked_at: datetime | None,
+) -> AnalysisTagUpdateResult:
+    _ = conn.execute(
+        sa.update(models.AIAnalysis)
+        .where(models.AIAnalysis.analysis_id == analysis_id)
+        .values(
+            tag=tag,
+            time_tag_changed=sa.func.now(),
+            was_asked=was_asked,
+            asked_at_transcript_id=asked_at_transcript_id,
+            asked_at=asked_at,
+        )
+    )
+
+    return AnalysisTagUpdateResult(
+        analysis_id=analysis_id,
+        tag=tag,
+        was_asked=was_asked,
+        asked_at_transcript_id=asked_at_transcript_id,
+    )
 
 
 def get_all_ai_analyses(
@@ -546,6 +604,7 @@ def get_all_ai_analyses(
                 models.AIAnalysis.tag,
                 models.AIAnalysis.was_asked,
                 models.AIAnalysis.asked_at_transcript_id,
+                models.AIAnalysis.asked_at,
                 sa.func.row_number()
                 .over(order_by=models.AIAnalysis.analysis_id.asc())
                 .label("ordinal"),
@@ -565,6 +624,7 @@ def get_all_ai_analyses(
                 subq.c.tag,
                 subq.c.was_asked,
                 subq.c.asked_at_transcript_id,
+                subq.c.asked_at,
                 subq.c.ordinal,
             ).order_by(subq.c.analysis_id.asc())
         ).all()
@@ -587,6 +647,9 @@ def get_all_ai_analyses(
             ordinal=row.ordinal,  # pyright: ignore[reportAny]
             was_asked=row.was_asked,  # pyright: ignore[reportAny]
             asked_at_transcript_id=row.asked_at_transcript_id,  # pyright: ignore[reportAny]
+            asked_at=row.asked_at.replace(tzinfo=timezone.utc)  # pyright: ignore[reportAny]
+            if row.asked_at  # pyright: ignore[reportAny]
+            else None,
         )
         for row in rows
     ]
@@ -619,6 +682,7 @@ def get_analyses_by_ids(
                 models.AIAnalysis.tag,
                 models.AIAnalysis.was_asked,
                 models.AIAnalysis.asked_at_transcript_id,
+                models.AIAnalysis.asked_at,
                 sa.func.row_number()
                 .over(order_by=models.AIAnalysis.analysis_id.asc())
                 .label("ordinal"),
@@ -638,6 +702,7 @@ def get_analyses_by_ids(
                 subq.c.tag,
                 subq.c.was_asked,
                 subq.c.asked_at_transcript_id,
+                subq.c.asked_at,
                 subq.c.ordinal,
             )
             .where(subq.c.analysis_id.in_(analysis_id_strs))
@@ -663,6 +728,7 @@ def get_analyses_by_ids(
             ordinal=row.ordinal,  # pyright: ignore[reportAny]
             was_asked=row.was_asked,  # pyright: ignore[reportAny]
             asked_at_transcript_id=row.asked_at_transcript_id,  # pyright: ignore[reportAny]
+            asked_at=row.asked_at,  # pyright: ignore[reportAny]
         )
         for row in rows
     }
@@ -673,43 +739,109 @@ def get_analyses_by_ids(
     ]
 
 
-def update_ai_analysis_tag(
+def mark_ai_analysis_asked(
     db: PersistentDatabase,
     analysis_id: str,
-    tag: str | None,
-    _user_id: UserId,
-    was_asked: bool | None = None,
-    asked_at_transcript_id: str | None = None,
-):
-    """
-    Update the tag for an AI analysis.
-
-    Args:
-        analysis_id: The ID of the analysis to update
-        tag: The new tag value ("starred", "dismissed", "starred_dismissed", or None to clear)
-        _user_id: User ID (kept for API compatibility, not used as tags are project-wide)
-        was_asked: Whether the question was asked (only relevant when dismissing)
-        asked_at_transcript_id: The transcript ID where the question was asked
-    """
+    asked_at_transcript_id: str,
+) -> AnalysisTagUpdateResult:
     with db.begin() as conn:
-        update_values: dict[str, object] = {
-            "tag": tag,
-            "time_tag_changed": sa.func.now(),
-        }
+        current_tag, _, _ = _get_ai_analysis_state_for_update(conn, analysis_id)
+        if current_tag not in (None, "starred"):
+            raise ValueError("mark_asked is only valid for active or starred analyses")
 
-        # Only update answered fields if they are provided
-        if was_asked is not None:
-            update_values["was_asked"] = was_asked
+        asked_at = datetime.now(timezone.utc)
+        new_tag: AnalysisTag = (
+            "starred_dismissed" if current_tag == "starred" else "dismissed"
+        )
+        return _persist_ai_analysis_state(
+            conn,
+            analysis_id=analysis_id,
+            tag=new_tag,
+            was_asked=True,
+            asked_at_transcript_id=asked_at_transcript_id,
+            asked_at=asked_at,
+        )
 
-        if asked_at_transcript_id is None:
-            update_values["asked_at_transcript_id"] = None
-        else:
-            update_values["asked_at_transcript_id"] = asked_at_transcript_id
 
-        _ = conn.execute(
-            sa.update(models.AIAnalysis)
-            .where(models.AIAnalysis.analysis_id == analysis_id)
-            .values(**update_values)
+def mark_ai_analysis_dismissed_not_asked(
+    db: PersistentDatabase,
+    analysis_id: str,
+) -> AnalysisTagUpdateResult:
+    with db.begin() as conn:
+        current_tag, _, _ = _get_ai_analysis_state_for_update(conn, analysis_id)
+        if current_tag not in (None, "starred"):
+            raise ValueError(
+                "mark_dismissed_not_asked is only valid for active or starred analyses"
+            )
+
+        new_tag: AnalysisTag = (
+            "starred_dismissed" if current_tag == "starred" else "dismissed"
+        )
+        return _persist_ai_analysis_state(
+            conn,
+            analysis_id=analysis_id,
+            tag=new_tag,
+            was_asked=False,
+            asked_at_transcript_id=None,
+            asked_at=None,
+        )
+
+
+def undo_ai_analysis_dismissal(
+    db: PersistentDatabase,
+    analysis_id: str,
+) -> AnalysisTagUpdateResult:
+    with db.begin() as conn:
+        current_tag, _, _ = _get_ai_analysis_state_for_update(conn, analysis_id)
+        if current_tag not in ("dismissed", "starred_dismissed"):
+            raise ValueError("undo is only valid for dismissed analyses")
+
+        new_tag: AnalysisTag = "starred" if current_tag == "starred_dismissed" else None
+        return _persist_ai_analysis_state(
+            conn,
+            analysis_id=analysis_id,
+            tag=new_tag,
+            was_asked=None,
+            asked_at_transcript_id=None,
+            asked_at=None,
+        )
+
+
+def star_ai_analysis(
+    db: PersistentDatabase,
+    analysis_id: str,
+) -> AnalysisTagUpdateResult:
+    with db.begin() as conn:
+        current_tag, _, _ = _get_ai_analysis_state_for_update(conn, analysis_id)
+        if current_tag is not None:
+            raise ValueError("star is only valid for active analyses")
+
+        return _persist_ai_analysis_state(
+            conn,
+            analysis_id=analysis_id,
+            tag="starred",
+            was_asked=None,
+            asked_at_transcript_id=None,
+            asked_at=None,
+        )
+
+
+def unstar_ai_analysis(
+    db: PersistentDatabase,
+    analysis_id: str,
+) -> AnalysisTagUpdateResult:
+    with db.begin() as conn:
+        current_tag, _, _ = _get_ai_analysis_state_for_update(conn, analysis_id)
+        if current_tag != "starred":
+            raise ValueError("unstar is only valid for starred analyses")
+
+        return _persist_ai_analysis_state(
+            conn,
+            analysis_id=analysis_id,
+            tag=None,
+            was_asked=None,
+            asked_at_transcript_id=None,
+            asked_at=None,
         )
 
 

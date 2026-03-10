@@ -27,7 +27,7 @@ def upgrade() -> None:
         sa.Column("oidc_id", sa.String(length=255), nullable=False),
         sa.Column(
             "updated_at",
-            sa.DateTime(),
+            sa.DateTime(timezone=True),
             server_default=sa.text("(CURRENT_TIMESTAMP)"),
             nullable=False,
         ),
@@ -42,13 +42,13 @@ def upgrade() -> None:
         sa.Column("creator_user_id", sa.String(length=26), nullable=False),
         sa.Column(
             "created_at",
-            sa.DateTime(),
+            sa.DateTime(timezone=True),
             server_default=sa.text("(CURRENT_TIMESTAMP)"),
             nullable=False,
         ),
         sa.Column(
             "updated_at",
-            sa.DateTime(),
+            sa.DateTime(timezone=True),
             server_default=sa.text("(CURRENT_TIMESTAMP)"),
             nullable=False,
         ),
@@ -65,11 +65,11 @@ def upgrade() -> None:
         sa.Column("user_id", sa.String(length=26), nullable=False),
         sa.Column(
             "started_at",
-            sa.DateTime(),
+            sa.DateTime(timezone=True),
             server_default=sa.text("(CURRENT_TIMESTAMP)"),
             nullable=False,
         ),
-        sa.Column("ended_at", sa.DateTime(), nullable=True),
+        sa.Column("ended_at", sa.DateTime(timezone=True), nullable=True),
         sa.ForeignKeyConstraint(
             ["project_id"],
             ["project.project_id"],
@@ -90,13 +90,13 @@ def upgrade() -> None:
         sa.Column("speaker", sa.String(length=100), nullable=True),
         sa.Column(
             "created_at",
-            sa.DateTime(),
+            sa.DateTime(timezone=True),
             server_default=sa.text("(CURRENT_TIMESTAMP)"),
             nullable=False,
         ),
         sa.Column(
             "updated_at",
-            sa.DateTime(),
+            sa.DateTime(timezone=True),
             server_default=sa.text("(CURRENT_TIMESTAMP)"),
             nullable=False,
         ),
@@ -122,9 +122,10 @@ def upgrade() -> None:
         sa.Column("transcript_context_end", sa.String(length=26), nullable=False),
         sa.Column("summary", sa.Text(), nullable=False),
         sa.Column("tag", sa.String(length=50), nullable=True),
-        sa.Column("time_tag_changed", sa.DateTime(), nullable=True),
+        sa.Column("time_tag_changed", sa.DateTime(timezone=True), nullable=True),
         sa.Column("was_asked", sa.Boolean(), nullable=True),
         sa.Column("asked_at_transcript_id", sa.String(length=26), nullable=True),
+        sa.Column("asked_at", sa.DateTime(timezone=True), nullable=True),
         sa.ForeignKeyConstraint(
             ["project_id"],
             ["project.project_id"],
