@@ -524,6 +524,7 @@ class AnalysisRow(BaseModel):
     was_asked: bool | None = None
     asked_at_transcript_id: str | None = None
     asked_at: datetime | None = None
+    time_tag_changed: datetime | None = None
 
 
 type AnalysisTag = Literal["starred", "dismissed", "starred_dismissed"] | None
@@ -605,6 +606,7 @@ def get_all_ai_analyses(
                 models.AIAnalysis.was_asked,
                 models.AIAnalysis.asked_at_transcript_id,
                 models.AIAnalysis.asked_at,
+                models.AIAnalysis.time_tag_changed,
                 sa.func.row_number()
                 .over(order_by=models.AIAnalysis.analysis_id.asc())
                 .label("ordinal"),
@@ -625,6 +627,7 @@ def get_all_ai_analyses(
                 subq.c.was_asked,
                 subq.c.asked_at_transcript_id,
                 subq.c.asked_at,
+                subq.c.time_tag_changed,
                 subq.c.ordinal,
             ).order_by(subq.c.analysis_id.asc())
         ).all()
@@ -649,6 +652,9 @@ def get_all_ai_analyses(
             asked_at_transcript_id=row.asked_at_transcript_id,  # pyright: ignore[reportAny]
             asked_at=row.asked_at.replace(tzinfo=timezone.utc)  # pyright: ignore[reportAny]
             if row.asked_at  # pyright: ignore[reportAny]
+            else None,
+            time_tag_changed=row.time_tag_changed.replace(tzinfo=timezone.utc)  # pyright: ignore[reportAny]
+            if row.time_tag_changed  # pyright: ignore[reportAny]
             else None,
         )
         for row in rows
@@ -703,6 +709,7 @@ def get_analyses_by_ids(
                 subq.c.was_asked,
                 subq.c.asked_at_transcript_id,
                 subq.c.asked_at,
+                subq.c.time_tag_changed,
                 subq.c.ordinal,
             )
             .where(subq.c.analysis_id.in_(analysis_id_strs))
@@ -728,7 +735,12 @@ def get_analyses_by_ids(
             ordinal=row.ordinal,  # pyright: ignore[reportAny]
             was_asked=row.was_asked,  # pyright: ignore[reportAny]
             asked_at_transcript_id=row.asked_at_transcript_id,  # pyright: ignore[reportAny]
-            asked_at=row.asked_at,  # pyright: ignore[reportAny]
+            asked_at=row.asked_at.replace(tzinfo=timezone.utc)  # pyright: ignore[reportAny]
+            if row.asked_at  # pyright: ignore[reportAny]
+            else None,
+            time_tag_changed=row.time_tag_changed.replace(tzinfo=timezone.utc)  # pyright: ignore[reportAny]
+            if row.time_tag_changed  # pyright: ignore[reportAny]
+            else None,
         )
         for row in rows
     }

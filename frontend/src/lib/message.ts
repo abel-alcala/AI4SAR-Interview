@@ -74,6 +74,7 @@ export interface AnalysisRow {
     was_asked?: boolean | null;
     asked_at_transcript_id?: string | null;
     asked_at?: string | null;
+    time_tag_changed?: string | null;
 }
 
 export interface CatchupMessage {
