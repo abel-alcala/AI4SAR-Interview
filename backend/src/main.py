@@ -454,6 +454,8 @@ async def websocket_endpoint(
                                     tag=update.tag,
                                     was_asked=update.was_asked,
                                     asked_at_transcript_id=update.asked_at_transcript_id,
+                                    time_tag_changed=update.time_tag_changed,
+                                    asked_at=update.asked_at,
                                 )
                                 await session_manager.broadcast_to_project(
                                     context.project_id, update_message
