@@ -45,6 +45,7 @@ class ReportQuestionEntry:
     context_anchor: str | None
     answered_at_anchor: str | None
     answered_at_text: str | None
+    is_starred: bool
     transcript_excerpt: str | None = None
 
 
@@ -84,6 +85,16 @@ def _format_duration_hms(duration: timedelta) -> str:
     hours, rem = divmod(total_seconds, 3600)
     minutes, seconds = divmod(rem, 60)
     return f"{hours}h {minutes}m {seconds}s"
+
+
+def _format_excerpt_window(duration: timedelta) -> str:
+    total_seconds = int(max(duration.total_seconds(), 0))
+    minutes, seconds = divmod(total_seconds, 60)
+    if minutes > 0 and seconds == 0:
+        return f"{minutes} minute" if minutes == 1 else f"{minutes} minutes"
+    if minutes > 0:
+        return f"{minutes}m {seconds}s"
+    return f"{seconds} second" if seconds == 1 else f"{seconds} seconds"
 
 
 def _ordered_category_items(
@@ -347,6 +358,7 @@ def build_report_data(project_id: str, db: PersistentDatabase) -> ReportData | N
             ),
             answered_at_anchor=answered_anchor,
             answered_at_text=answered_at_text,
+            is_starred=analysis.tag in ("starred", "starred_dismissed"),
             transcript_excerpt=transcript_excerpt,
         )
 
@@ -408,9 +420,19 @@ def _render_question_sections(
         story.append(Spacer(1, 0.12 * inch))
 
         for entry in entries:
+            star_icon = (
+                '<font color="#c98a00"><b>&#9733;</b></font>'
+                if entry.is_starred
+                else ""
+            )
+            question_label = (
+                f"Q{entry.ordinal}. {star_icon}"
+                if entry.is_starred
+                else f"Q{entry.ordinal}."
+            )
             story.append(
                 Paragraph(
-                    f'<a name="{entry.question_anchor}"/><font color="#1a472a"><b>Q{entry.ordinal}.</b></font> {escape(entry.text)}',
+                    f'<a name="{entry.question_anchor}"/><font color="#1a472a"><b>{question_label}</b></font> {escape(entry.text)}',
                     question_style,
                 )
             )
@@ -449,17 +471,18 @@ def _render_question_sections(
                     )
 
             if entry.transcript_excerpt:
-                formatted_excerpt = "... " + escape(entry.transcript_excerpt).replace(
-                    "\n", "<br/>"
+                formatted_excerpt = (
+                    '<font color="#555555"><b>[ . . . ]</b></font><br/>'
+                    + escape(entry.transcript_excerpt).replace("\n", "<br/>")
                 )
                 excerpt_label = (
-                    f'<a href="#{entry.answered_at_anchor}" color="#666666"><u>Transcript Excerpt</u></a>'
+                    f'<a href="#{entry.answered_at_anchor}" color="#666666"><u>Transcript Excerpt (Last {_format_excerpt_window(TRANSCRIPT_EXCERPT_WINDOW)})</u></a>'
                     if entry.answered_at_anchor
-                    else "Transcript Excerpt"
+                    else f"Transcript Excerpt (Last {_format_excerpt_window(TRANSCRIPT_EXCERPT_WINDOW)})"
                 )
                 story.append(
                     Paragraph(
-                        f'<font color="#666666"><i>{excerpt_label}:</i></font> {formatted_excerpt}',
+                        f'<font color="#666666"><i>{excerpt_label}:</i></font><br/>{formatted_excerpt}',
                         excerpt_style,
                     )
                 )
