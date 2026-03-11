@@ -32,6 +32,10 @@ from interview_helper.downloads.util import extract_timestamp_from_ulid
 
 # Time window for transcript excerpts before answered questions
 TRANSCRIPT_EXCERPT_WINDOW = timedelta(minutes=1)
+# Time gap threshold for adding visual separators between transcript entries
+TRANSCRIPT_ENTRY_GAP_SEPARATOR_THRESHOLD = timedelta(minutes=5)
+# If an answered-question event happens after this delay, render a standalone timestamp.
+ANSWERED_EVENT_TIMESTAMP_CUTOFF = timedelta(minutes=2)
 
 
 @dataclass
@@ -55,8 +59,11 @@ class ReportTranscriptSection:
     speaker: str
     text: str
     started_at: datetime
+    ended_at: datetime
     chunk_ids: list[str] = field(default_factory=list)
-    answered_question_refs: list[tuple[int, str]] = field(default_factory=list)
+    answered_question_refs: list[tuple[int, str, datetime]] = field(
+        default_factory=list
+    )
 
 
 @dataclass
@@ -97,6 +104,18 @@ def _format_excerpt_window(duration: timedelta) -> str:
     return f"{seconds} second" if seconds == 1 else f"{seconds} seconds"
 
 
+def _format_gap_duration(duration: timedelta) -> str:
+    total_seconds = int(max(duration.total_seconds(), 0))
+    hours, rem = divmod(total_seconds, 3600)
+    minutes, seconds = divmod(rem, 60)
+
+    if hours > 0:
+        return f"{hours}h {minutes}m {seconds}s"
+    if minutes > 0:
+        return f"{minutes}m {seconds}s"
+    return f"{seconds}s"
+
+
 def _ordered_category_items(
     grouped: dict[str, list[ReportQuestionEntry]],
 ) -> list[tuple[str, list[ReportQuestionEntry]]]:
@@ -130,11 +149,13 @@ def _build_transcript_anchor_index(
             return
 
         anchor = f"transcript-{len(sections) + 1}"
+        ended_at = extract_timestamp_from_ulid(current_chunk_ids[-1])
         section = ReportTranscriptSection(
             anchor=anchor,
             speaker=current_speaker,
             text=" ".join(current_texts).strip(),
             started_at=current_started_at,
+            ended_at=ended_at,
             chunk_ids=[*current_chunk_ids],
         )
         sections.append(section)
@@ -364,17 +385,17 @@ def build_report_data(project_id: str, db: PersistentDatabase) -> ReportData | N
 
         if analysis.was_asked is True:
             answered_by_category[normalized_category].append(entry)
-            if answered_anchor is not None:
+            if answered_anchor is not None and analysis.asked_at is not None:
                 section = anchor_index.section_by_anchor.get(answered_anchor)
                 if section is not None:
                     section.answered_question_refs.append(
-                        (entry.ordinal, entry.question_anchor)
+                        (entry.ordinal, entry.question_anchor, analysis.asked_at)
                     )
         else:
             unanswered_by_category[normalized_category].append(entry)
 
     for section in anchor_index.sections:
-        section.answered_question_refs.sort(key=lambda item: item[0])
+        section.answered_question_refs.sort(key=lambda item: item[2])
 
     project_name = str(transcript_rows[0]["project_name"] or "Untitled Project")
     first_timestamp = extract_timestamp_from_ulid(
@@ -558,6 +579,15 @@ def generate_report_pdf(project_id: str, db: PersistentDatabase) -> bytes | None
         spaceBefore=6,
         spaceAfter=4,
     )
+    gap_separator_style = ParagraphStyle(
+        "GapSeparatorStyle",
+        parent=normal_style,
+        fontSize=10,
+        textColor=colors.HexColor("#777777"),
+        alignment=1,
+        spaceBefore=6,
+        spaceAfter=6,
+    )
 
     story: list[Flowable] = []
 
@@ -610,7 +640,19 @@ def generate_report_pdf(project_id: str, db: PersistentDatabase) -> bytes | None
     story.append(Paragraph("Transcript", heading_style))
     story.append(Spacer(1, 0.15 * inch))
 
+    previous_ended_at: datetime | None = None
     for section in report_data.transcript_sections:
+        if previous_ended_at is not None:
+            time_gap = section.started_at - previous_ended_at
+            if time_gap > TRANSCRIPT_ENTRY_GAP_SEPARATOR_THRESHOLD:
+                story.append(
+                    Paragraph(
+                        f'<font color="#777777"><i>[ . . . {_format_gap_duration(time_gap)} passed . . . ]</i></font>',
+                        gap_separator_style,
+                    )
+                )
+                story.append(Spacer(1, 0.06 * inch))
+
         speaker = section.speaker if section.speaker else "Unknown Speaker"
         transcript_heading = f"[{_format_utc(section.started_at)}] {speaker}"
         story.append(
@@ -627,20 +669,74 @@ def generate_report_pdf(project_id: str, db: PersistentDatabase) -> bytes | None
         )
 
         if section.answered_question_refs:
-            links = ", ".join(
-                [
-                    f'<a href="#{question_anchor}" color="blue"><u>Q{ordinal}</u></a>'
-                    for ordinal, question_anchor in section.answered_question_refs
-                ]
-            )
-            story.append(
-                Paragraph(
-                    f'<font color="#555555"><i>Answered Here:</i></font> {links}',
-                    normal_style,
+            grouped_answered_refs: list[
+                tuple[datetime, datetime, list[tuple[int, str]]]
+            ] = []
+            group_first_at: datetime | None = None
+            group_last_at: datetime | None = None
+            group_links: list[tuple[int, str]] = []
+
+            for ordinal, question_anchor, answered_at in section.answered_question_refs:
+                if group_first_at is None or group_last_at is None:
+                    group_first_at = answered_at
+                    group_last_at = answered_at
+                    group_links = [(ordinal, question_anchor)]
+                    continue
+
+                if answered_at - group_last_at <= ANSWERED_EVENT_TIMESTAMP_CUTOFF:
+                    group_last_at = answered_at
+                    group_links.append((ordinal, question_anchor))
+                    continue
+
+                grouped_answered_refs.append(
+                    (group_first_at, group_last_at, [*group_links])
                 )
-            )
+                group_first_at = answered_at
+                group_last_at = answered_at
+                group_links = [(ordinal, question_anchor)]
+
+            if group_first_at is not None and group_last_at is not None:
+                grouped_answered_refs.append(
+                    (group_first_at, group_last_at, [*group_links])
+                )
+
+            last_rendered_timestamp = section.ended_at
+            for group_first_at, group_last_at, grouped_links in grouped_answered_refs:
+                group_gap = group_first_at - last_rendered_timestamp
+                if group_gap > TRANSCRIPT_ENTRY_GAP_SEPARATOR_THRESHOLD:
+                    story.append(
+                        Paragraph(
+                            f'<font color="#777777"><i>[ . . . {_format_gap_duration(group_gap)} passed . . . ]</i></font>',
+                            gap_separator_style,
+                        )
+                    )
+                    story.append(Spacer(1, 0.06 * inch))
+
+                if group_gap > ANSWERED_EVENT_TIMESTAMP_CUTOFF:
+                    story.append(
+                        Paragraph(
+                            f'<font color="#2E5090"><b>[{_format_utc(group_first_at)}]</b></font>',
+                            normal_style,
+                        )
+                    )
+
+                grouped_links_text = ", ".join(
+                    [
+                        f'<a href="#{question_anchor}" color="blue"><u>Q{ordinal}</u></a>'
+                        for ordinal, question_anchor in grouped_links
+                    ]
+                )
+
+                story.append(
+                    Paragraph(
+                        f'<font color="#555555"><i>Answered Here:</i></font> {grouped_links_text}',
+                        normal_style,
+                    )
+                )
+                last_rendered_timestamp = group_last_at
 
         story.append(Spacer(1, 0.1 * inch))
+        previous_ended_at = section.ended_at
 
     story.append(PageBreak())
 

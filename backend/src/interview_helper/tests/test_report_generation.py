@@ -165,8 +165,9 @@ def test_build_report_data_groups_questions_and_creates_bidirectional_anchors():
 
     transcript_section = report.transcript_sections[1]
     assert len(transcript_section.answered_question_refs) == 1
-    _, question_anchor = transcript_section.answered_question_refs[0]
+    _, question_anchor, question_datetime = transcript_section.answered_question_refs[0]
     assert question_anchor == answered_entry.question_anchor
+    assert question_datetime == explicit_asked_at
 
 
 def test_generate_report_pdf_returns_pdf_bytes():
