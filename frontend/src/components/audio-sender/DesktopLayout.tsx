@@ -86,8 +86,11 @@ export function DesktopLayout({
     } | null>(null);
 
     const clampInsightsWidth = useCallback((nextWidth: number) => {
+        const storedContainerWidth = dragStateRef.current?.containerWidth;
         const containerWidth =
-            resizeHandleRef.current?.parentElement?.clientWidth ?? 0;
+            storedContainerWidth ??
+            resizeHandleRef.current?.parentElement?.clientWidth ??
+            0;
 
         if (containerWidth <= 0) return nextWidth;
 
