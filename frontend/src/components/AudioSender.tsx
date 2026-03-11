@@ -501,6 +501,9 @@ export function AudioSender({ projectId }: AudioSenderProps) {
                               was_asked: message.was_asked ?? null,
                               asked_at_transcript_id:
                                   message.asked_at_transcript_id ?? null,
+                              asked_at: message.asked_at ?? null,
+                              time_tag_changed:
+                                  message.time_tag_changed ?? null,
                           }
                         : insight,
                 ),

@@ -72,6 +72,8 @@ class UpdateAIAnalysisTag(BaseModel):
     tag: Literal["starred", "dismissed", "starred_dismissed"] | None
     was_asked: bool | None = None
     asked_at_transcript_id: str | None = None
+    asked_at: datetime | None = None
+    time_tag_changed: datetime | None = None
 
 
 class MarkAIAnalysisAsked(BaseModel):

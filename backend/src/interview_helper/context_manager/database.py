@@ -2,7 +2,7 @@ from collections.abc import Sequence
 from datetime import datetime, timezone
 from pydantic import BaseModel
 from sqlalchemy.sql.sqltypes import DateTime
-from typing import Literal, TypedDict
+from typing import Literal, TypedDict, cast
 from interview_helper.context_manager.types import (
     AnalysisId,
     ProjectId,
@@ -486,6 +486,14 @@ class ProjectCreatorInfo:
     name: str
 
 
+def _normalize_db_timestamp(ts: datetime | None) -> datetime | None:
+    if ts is None:
+        return None
+    if ts.tzinfo is None:
+        return ts.replace(tzinfo=timezone.utc)
+    return ts.astimezone(timezone.utc)
+
+
 def get_project_creator_and_name(
     db: PersistentDatabase, project_id: ProjectId
 ) -> ProjectCreatorInfo | None:
@@ -536,6 +544,8 @@ class AnalysisTagUpdateResult:
     tag: AnalysisTag
     was_asked: bool | None
     asked_at_transcript_id: str | None
+    asked_at: datetime | None
+    time_tag_changed: datetime | None
 
 
 def _get_ai_analysis_state_for_update(
@@ -564,7 +574,7 @@ def _persist_ai_analysis_state(
     asked_at_transcript_id: str | None,
     asked_at: datetime | None,
 ) -> AnalysisTagUpdateResult:
-    _ = conn.execute(
+    row = conn.execute(
         sa.update(models.AIAnalysis)
         .where(models.AIAnalysis.analysis_id == analysis_id)
         .values(
@@ -574,13 +584,22 @@ def _persist_ai_analysis_state(
             asked_at_transcript_id=asked_at_transcript_id,
             asked_at=asked_at,
         )
-    )
+        .returning(
+            models.AIAnalysis.asked_at,
+            models.AIAnalysis.time_tag_changed,
+        )
+    ).one()
+
+    asked_at_db = cast(datetime | None, row.asked_at)
+    time_tag_changed_db = cast(datetime | None, row.time_tag_changed)
 
     return AnalysisTagUpdateResult(
         analysis_id=analysis_id,
         tag=tag,
         was_asked=was_asked,
         asked_at_transcript_id=asked_at_transcript_id,
+        asked_at=_normalize_db_timestamp(asked_at_db),
+        time_tag_changed=_normalize_db_timestamp(time_tag_changed_db),
     )
 
 
@@ -650,12 +669,10 @@ def get_all_ai_analyses(
             ordinal=row.ordinal,  # pyright: ignore[reportAny]
             was_asked=row.was_asked,  # pyright: ignore[reportAny]
             asked_at_transcript_id=row.asked_at_transcript_id,  # pyright: ignore[reportAny]
-            asked_at=row.asked_at.replace(tzinfo=timezone.utc)  # pyright: ignore[reportAny]
-            if row.asked_at  # pyright: ignore[reportAny]
-            else None,
-            time_tag_changed=row.time_tag_changed.replace(tzinfo=timezone.utc)  # pyright: ignore[reportAny]
-            if row.time_tag_changed  # pyright: ignore[reportAny]
-            else None,
+            asked_at=_normalize_db_timestamp(cast(datetime | None, row.asked_at)),
+            time_tag_changed=_normalize_db_timestamp(
+                cast(datetime | None, row.time_tag_changed)
+            ),
         )
         for row in rows
     ]
@@ -736,12 +753,10 @@ def get_analyses_by_ids(
             ordinal=row.ordinal,  # pyright: ignore[reportAny]
             was_asked=row.was_asked,  # pyright: ignore[reportAny]
             asked_at_transcript_id=row.asked_at_transcript_id,  # pyright: ignore[reportAny]
-            asked_at=row.asked_at.replace(tzinfo=timezone.utc)  # pyright: ignore[reportAny]
-            if row.asked_at  # pyright: ignore[reportAny]
-            else None,
-            time_tag_changed=row.time_tag_changed.replace(tzinfo=timezone.utc)  # pyright: ignore[reportAny]
-            if row.time_tag_changed  # pyright: ignore[reportAny]
-            else None,
+            asked_at=_normalize_db_timestamp(cast(datetime | None, row.asked_at)),
+            time_tag_changed=_normalize_db_timestamp(
+                cast(datetime | None, row.time_tag_changed)
+            ),
         )
         for row in rows
     }

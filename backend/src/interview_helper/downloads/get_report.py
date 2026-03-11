@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections import defaultdict
+from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
@@ -216,23 +216,7 @@ def _analysis_context_anchor(
     return chunk_to_section_anchor.get(str(analysis.transcript_context_end))
 
 
-def _build_transcript_excerpt(
-    transcript_rows: Sequence[TranscriptionWithProjectDetails],
-    asked_at_timestamp: datetime,
-) -> str | None:
-    excerpt_start_time = asked_at_timestamp - TRANSCRIPT_EXCERPT_WINDOW
-    excerpt_rows: list[tuple[str, str]] = []
-
-    for row in transcript_rows:
-        row_timestamp = extract_timestamp_from_ulid(str(row["transcription_id"]))
-        if not (excerpt_start_time <= row_timestamp < asked_at_timestamp):
-            continue
-
-        speaker = str(row["speaker"] or "Unknown Speaker")
-        text = str(row["text_output"] or "").strip()
-        if text:
-            excerpt_rows.append((speaker, text))
-
+def _format_excerpt_rows(excerpt_rows: Sequence[tuple[str, str]]) -> str | None:
     if len(excerpt_rows) == 0:
         return None
 
@@ -266,6 +250,54 @@ def _build_transcript_excerpt(
     return "\n".join(grouped_lines) if grouped_lines else None
 
 
+def _precompute_transcript_excerpts_by_asked_at(
+    transcript_rows: Sequence[TranscriptionWithProjectDetails],
+    analyses: Sequence[AnalysisRow],
+) -> dict[str, str | None]:
+    asked_events = sorted(
+        [
+            (analysis.asked_at, analysis.analysis_id)
+            for analysis in analyses
+            if analysis.asked_at is not None
+        ],
+        key=lambda item: item[0],
+    )
+    if len(asked_events) == 0:
+        return {}
+
+    excerpts_by_analysis_id: dict[str, str | None] = {}
+    window_rows: deque[tuple[datetime, str, str]] = deque()
+    transcript_events: list[tuple[datetime, str, str]] = []
+
+    for row in transcript_rows:
+        row_timestamp = extract_timestamp_from_ulid(str(row["transcription_id"]))
+        speaker = str(row["speaker"] or "Unknown Speaker")
+        text = str(row["text_output"] or "").strip()
+        if text:
+            transcript_events.append((row_timestamp, speaker, text))
+
+    event_index = 0
+    event_count = len(transcript_events)
+
+    for asked_at_timestamp, analysis_id in asked_events:
+        while (
+            event_index < event_count
+            and transcript_events[event_index][0] < asked_at_timestamp
+        ):
+            window_rows.append(transcript_events[event_index])
+            event_index += 1
+
+        excerpt_start_time = asked_at_timestamp - TRANSCRIPT_EXCERPT_WINDOW
+        while window_rows and window_rows[0][0] < excerpt_start_time:
+            _ = window_rows.popleft()
+
+        excerpts_by_analysis_id[analysis_id] = _format_excerpt_rows(
+            [(speaker, text) for _, speaker, text in window_rows]
+        )
+
+    return excerpts_by_analysis_id
+
+
 def build_report_data(project_id: str, db: PersistentDatabase) -> ReportData | None:
     typed_project_id = ProjectId.from_str(project_id)
 
@@ -275,6 +307,10 @@ def build_report_data(project_id: str, db: PersistentDatabase) -> ReportData | N
 
     anchor_index = _build_transcript_anchor_index(transcript_rows)
     analyses = get_all_ai_analyses(db, typed_project_id)
+
+    transcript_excerpts_by_analysis_id = _precompute_transcript_excerpts_by_asked_at(
+        transcript_rows, analyses
+    )
 
     answered_by_category: dict[str, list[ReportQuestionEntry]] = defaultdict(list)
     unanswered_by_category: dict[str, list[ReportQuestionEntry]] = defaultdict(list)
@@ -293,8 +329,8 @@ def build_report_data(project_id: str, db: PersistentDatabase) -> ReportData | N
             asked_at_id = analysis.asked_at_transcript_id.lower()
             answered_anchor = anchor_index.chunk_to_section_anchor.get(asked_at_id)
             answered_at_text = _format_utc(analysis.asked_at)
-            transcript_excerpt = _build_transcript_excerpt(
-                transcript_rows, analysis.asked_at
+            transcript_excerpt = transcript_excerpts_by_analysis_id.get(
+                analysis.analysis_id
             )
 
         question_anchor = f"question-{analysis.ordinal}"
