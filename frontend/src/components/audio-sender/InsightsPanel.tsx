@@ -48,10 +48,30 @@ export function InsightsPanel({
             a.tag !== "dismissed" &&
             a.tag !== "starred_dismissed",
     );
-    const starredInsights = insights.filter((a) => a.tag === "starred");
-    const dismissedInsights = insights.filter(
-        (a) => a.tag === "dismissed" || a.tag === "starred_dismissed",
-    );
+    const starredInsights = insights
+        .filter((a) => a.tag === "starred")
+        .sort((a, b) => {
+            // Sort by time_tag_changed, oldest first (newest at bottom)
+            const timeA = a.time_tag_changed
+                ? new Date(a.time_tag_changed).getTime()
+                : 0;
+            const timeB = b.time_tag_changed
+                ? new Date(b.time_tag_changed).getTime()
+                : 0;
+            return timeA - timeB;
+        });
+    const dismissedInsights = insights
+        .filter((a) => a.tag === "dismissed" || a.tag === "starred_dismissed")
+        .sort((a, b) => {
+            // Sort by time_tag_changed, oldest first
+            const timeA = a.time_tag_changed
+                ? new Date(a.time_tag_changed).getTime()
+                : 0;
+            const timeB = b.time_tag_changed
+                ? new Date(b.time_tag_changed).getTime()
+                : 0;
+            return timeA - timeB;
+        });
 
     const renderActiveInsight = (analysis: AnalysisRow) => (
         <Group key={analysis.analysis_id} gap="xs" align="flex-start">
@@ -366,18 +386,15 @@ export function InsightsPanel({
                                         here in real time.
                                     </Text>
                                 ) : (
-                                    activeInsights
-                                        .reverse()
-                                        .map((analysis, index) => (
-                                            <Fragment
-                                                key={analysis.analysis_id}
-                                            >
-                                                {renderActiveInsight(analysis)}
-                                                {index <
-                                                    activeInsights.length -
-                                                        1 && <Divider />}
-                                            </Fragment>
-                                        ))
+                                    activeInsights.map((analysis, index) => (
+                                        <Fragment key={analysis.analysis_id}>
+                                            {renderActiveInsight(analysis)}
+                                            {index <
+                                                activeInsights.length - 1 && (
+                                                <Divider />
+                                            )}
+                                        </Fragment>
+                                    ))
                                 )}
                             </Stack>
                         </Box>
@@ -397,18 +414,15 @@ export function InsightsPanel({
                                         No starred questions.
                                     </Text>
                                 ) : (
-                                    starredInsights
-                                        .reverse()
-                                        .map((analysis, index) => (
-                                            <Fragment
-                                                key={analysis.analysis_id}
-                                            >
-                                                {renderStarredInsight(analysis)}
-                                                {index <
-                                                    starredInsights.length -
-                                                        1 && <Divider />}
-                                            </Fragment>
-                                        ))
+                                    starredInsights.map((analysis, index) => (
+                                        <Fragment key={analysis.analysis_id}>
+                                            {renderStarredInsight(analysis)}
+                                            {index <
+                                                starredInsights.length - 1 && (
+                                                <Divider />
+                                            )}
+                                        </Fragment>
+                                    ))
                                 )}
                             </Stack>
                         </Box>

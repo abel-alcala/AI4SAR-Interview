@@ -10,12 +10,18 @@ from interview_helper.audio_stream_handler.transcription.transcription import (
     vosk_transcriber_consumer_pair,
 )
 from interview_helper.context_manager.messages import (
+    MarkAIAnalysisAsked,
+    MarkAIAnalysisDismissedNotAsked,
     UpdateAIAnalysisTag,
+    StarAIAnalysis,
+    UndoAIAnalysisDismissal,
+    UnstarAIAnalysis,
     PingMessage,
     CatchupMessage,
     ProjectMetadataMessage,
     TranscriptChunkToSend,
     RecordingStateMessage,
+    ErrorMessage,
 )
 from interview_helper.security.http import (
     verify_jwt_token,
@@ -48,7 +54,11 @@ from interview_helper.audio_stream_handler.audio_stream_handler import (
 from interview_helper.context_manager.database import (
     ProjectListing,
     create_new_project,
-    update_ai_analysis_tag,
+    mark_ai_analysis_asked,
+    mark_ai_analysis_dismissed_not_asked,
+    undo_ai_analysis_dismissal,
+    star_ai_analysis,
+    unstar_ai_analysis,
     get_all_projects,
     get_or_add_user_by_oidc_id,
     get_project_by_id,
@@ -58,7 +68,7 @@ from interview_helper.context_manager.database import (
     delete_project,
     get_project_creator_and_name,
 )
-from interview_helper.context_manager.types import ProjectId, TranscriptId
+from interview_helper.context_manager.types import ProjectId
 
 from fastapi.security import OpenIdConnect
 from fastapi import FastAPI, WebSocket, Depends, HTTPException, status
@@ -70,6 +80,7 @@ import wave
 import tempfile
 import sqlalchemy as sa
 from interview_helper.downloads.get_transcript import generate_transcript
+from interview_helper.downloads.get_report import generate_report_pdf
 from interview_helper.context_manager import models
 
 # Configure logging
@@ -398,19 +409,70 @@ async def websocket_endpoint(
                             await handle_webrtc_message(context, message)
                         elif isinstance(message, PingMessage):
                             await cws.send_message(PingMessage())
-                        elif isinstance(message, UpdateAIAnalysisTag):
-                            update_ai_analysis_tag(
-                                session_manager.db,
-                                message.analysis_id,
-                                message.tag,
-                                ticket.user_id,
-                                was_asked=message.was_asked,
-                                asked_at_transcript_id=message.asked_at_transcript_id,
-                            )
-                            # Broadcast the tag update to all sessions in this project
-                            await session_manager.broadcast_to_project(
-                                context.project_id, message
-                            )
+                        elif isinstance(
+                            message,
+                            (
+                                MarkAIAnalysisAsked,
+                                UndoAIAnalysisDismissal,
+                                MarkAIAnalysisDismissedNotAsked,
+                                StarAIAnalysis,
+                                UnstarAIAnalysis,
+                            ),
+                        ):
+                            try:
+                                if isinstance(message, MarkAIAnalysisAsked):
+                                    update = mark_ai_analysis_asked(
+                                        session_manager.db,
+                                        message.analysis_id,
+                                        message.asked_at_transcript_id,
+                                    )
+                                elif isinstance(message, UndoAIAnalysisDismissal):
+                                    update = undo_ai_analysis_dismissal(
+                                        session_manager.db,
+                                        message.analysis_id,
+                                    )
+                                elif isinstance(
+                                    message, MarkAIAnalysisDismissedNotAsked
+                                ):
+                                    update = mark_ai_analysis_dismissed_not_asked(
+                                        session_manager.db,
+                                        message.analysis_id,
+                                    )
+                                elif isinstance(message, StarAIAnalysis):
+                                    update = star_ai_analysis(
+                                        session_manager.db,
+                                        message.analysis_id,
+                                    )
+                                else:
+                                    update = unstar_ai_analysis(
+                                        session_manager.db,
+                                        message.analysis_id,
+                                    )
+
+                                update_message = UpdateAIAnalysisTag(
+                                    analysis_id=update.analysis_id,
+                                    tag=update.tag,
+                                    was_asked=update.was_asked,
+                                    asked_at_transcript_id=update.asked_at_transcript_id,
+                                    time_tag_changed=update.time_tag_changed,
+                                    asked_at=update.asked_at,
+                                )
+                                await session_manager.broadcast_to_project(
+                                    context.project_id, update_message
+                                )
+                            except ValueError as e:
+                                logger.warning(
+                                    "Rejected invalid AI analysis action for %s: %s",
+                                    message.analysis_id,
+                                    e,
+                                )
+                                await cws.send_message(
+                                    ErrorMessage(
+                                        error_code="invalid_ai_analysis_action",
+                                        message=str(e),
+                                        session_id=str(context.session_id),
+                                    )
+                                )
                         # handle other message types...
                 except WebSocketDisconnect:
                     logger.info(
@@ -631,14 +693,11 @@ async def download_questions(
             transcript_lines.append("\tStarred")
 
         if analysis.was_asked is True:
-            if analysis.asked_at_transcript_id:
-                transcript_id = TranscriptId.from_str(analysis.asked_at_transcript_id)
-                timestamp = transcript_id.get_datetime().strftime(
-                    "%Y-%m-%d %H:%M:%S %Z"
-                )
-                transcript_lines.append(f"\tAsked at {timestamp}")
-            else:
-                transcript_lines.append("\tAsked at unknown")
+            assert analysis.asked_at is not None, (
+                "asked_at should be set if was_asked is True"
+            )
+            timestamp = analysis.asked_at.strftime("%Y-%m-%d %H:%M:%S %Z")
+            transcript_lines.append(f"\tAsked at {timestamp}")
         elif analysis.was_asked is False:
             transcript_lines.append("\tNot Asked")
 
@@ -649,6 +708,35 @@ async def download_questions(
     return Response(
         content=questions_text,
         media_type="text/plain",
+        headers={"Content-Disposition": f'attachment; filename="{safe_filename}"'},
+    )
+
+
+@app.get("/project/{project_id}/download/report")
+async def download_report(project_id: str, token: Annotated[str, Depends(oidc_scheme)]):
+    """
+    Download a unified interview report for a project as a PDF
+    """
+    clean_token = token.removeprefix("Bearer ")
+    _ = verify_jwt_token(clean_token, jwks_client, CLIENT_ID, signing_algos)
+
+    project_id_typed = ProjectId.from_str(project_id)
+    project = get_project_by_id(session_manager.db, project_id_typed)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    report_pdf = generate_report_pdf(project_id=project_id, db=session_manager.db)
+    if report_pdf is None:
+        raise HTTPException(
+            status_code=404, detail="No transcriptions found for this project"
+        )
+
+    project_name = project["name"] or "report"
+    safe_filename = sanitize_filename(project_name, "report") + "_report.pdf"
+
+    return Response(
+        content=report_pdf,
+        media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{safe_filename}"'},
     )
 

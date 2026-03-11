@@ -72,6 +72,41 @@ class UpdateAIAnalysisTag(BaseModel):
     tag: Literal["starred", "dismissed", "starred_dismissed"] | None
     was_asked: bool | None = None
     asked_at_transcript_id: str | None = None
+    asked_at: datetime | None = None
+    time_tag_changed: datetime | None = None
+
+
+class MarkAIAnalysisAsked(BaseModel):
+    type: Literal["mark_ai_analysis_asked"] = "mark_ai_analysis_asked"
+    timestamp: datetime = Field(default_factory=datetime.now)
+    analysis_id: str
+    asked_at_transcript_id: str
+
+
+class UndoAIAnalysisDismissal(BaseModel):
+    type: Literal["undo_ai_analysis_dismissal"] = "undo_ai_analysis_dismissal"
+    timestamp: datetime = Field(default_factory=datetime.now)
+    analysis_id: str
+
+
+class MarkAIAnalysisDismissedNotAsked(BaseModel):
+    type: Literal["mark_ai_analysis_dismissed_not_asked"] = (
+        "mark_ai_analysis_dismissed_not_asked"
+    )
+    timestamp: datetime = Field(default_factory=datetime.now)
+    analysis_id: str
+
+
+class StarAIAnalysis(BaseModel):
+    type: Literal["star_ai_analysis"] = "star_ai_analysis"
+    timestamp: datetime = Field(default_factory=datetime.now)
+    analysis_id: str
+
+
+class UnstarAIAnalysis(BaseModel):
+    type: Literal["unstar_ai_analysis"] = "unstar_ai_analysis"
+    timestamp: datetime = Field(default_factory=datetime.now)
+    analysis_id: str
 
 
 class RecordingStateMessage(BaseModel):
@@ -89,6 +124,11 @@ WebSocketMessage = (
     | AIResultMessage
     | CatchupMessage
     | ProjectMetadataMessage
+    | MarkAIAnalysisAsked
+    | UndoAIAnalysisDismissal
+    | MarkAIAnalysisDismissedNotAsked
+    | StarAIAnalysis
+    | UnstarAIAnalysis
     | UpdateAIAnalysisTag
     | RecordingStateMessage
 )

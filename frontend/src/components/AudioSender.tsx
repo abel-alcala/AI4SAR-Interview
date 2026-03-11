@@ -93,21 +93,10 @@ export function AudioSender({ projectId }: AudioSenderProps) {
     // Handle starring an insight
     const handleStarInsight = useCallback(
         (analysisId: string) => {
-            // Update local state immediately
-            setInsights((prevState) =>
-                prevState.map((insight) =>
-                    insight.analysis_id === analysisId
-                        ? { ...insight, tag: "starred" }
-                        : insight,
-                ),
-            );
-
-            // Send update tag message to backend
             ws.sendMessage({
-                type: MessageType.UPDATE_AI_ANALYSIS_TAG,
+                type: MessageType.STAR_AI_ANALYSIS,
                 timestamp: new Date().toISOString(),
                 analysis_id: analysisId,
-                tag: "starred",
             });
         },
         [ws],
@@ -116,21 +105,10 @@ export function AudioSender({ projectId }: AudioSenderProps) {
     // Handle unstarring an insight
     const handleUnstarInsight = useCallback(
         (analysisId: string) => {
-            // Update local state immediately
-            setInsights((prevState) =>
-                prevState.map((insight) =>
-                    insight.analysis_id === analysisId
-                        ? { ...insight, tag: null }
-                        : insight,
-                ),
-            );
-
-            // Send update tag message to backend
             ws.sendMessage({
-                type: MessageType.UPDATE_AI_ANALYSIS_TAG,
+                type: MessageType.UNSTAR_AI_ANALYSIS,
                 timestamp: new Date().toISOString(),
                 analysis_id: analysisId,
-                tag: null,
             });
         },
         [ws],
@@ -139,110 +117,47 @@ export function AudioSender({ projectId }: AudioSenderProps) {
     // Handle dismissing an insight as answered
     const handleDismissAsAnswered = useCallback(
         (analysisId: string) => {
-            // Get the latest transcript ID
             const latestTranscriptId =
                 transcriptChunks.length > 0
                     ? transcriptChunks[transcriptChunks.length - 1]
                           .transcription_id
                     : null;
-
-            // Send update tag message to backend
-            const insight = insights.find((i) => i.analysis_id === analysisId);
-            const newTag =
-                insight?.tag === "starred" ? "starred_dismissed" : "dismissed";
-
-            // Update local state immediately
-            setInsights((prevState) =>
-                prevState.map((insight) => {
-                    if (insight.analysis_id === analysisId) {
-                        return {
-                            ...insight,
-                            tag: newTag,
-                            was_asked: true,
-                            asked_at_transcript_id: latestTranscriptId,
-                        };
-                    }
-                    return insight;
-                }),
-            );
+            if (!latestTranscriptId) {
+                return;
+            }
 
             ws.sendMessage({
-                type: MessageType.UPDATE_AI_ANALYSIS_TAG,
+                type: MessageType.MARK_AI_ANALYSIS_ASKED,
                 timestamp: new Date().toISOString(),
                 analysis_id: analysisId,
-                tag: newTag,
-                was_asked: true,
                 asked_at_transcript_id: latestTranscriptId,
             });
         },
-        [ws, insights, transcriptChunks],
+        [ws, transcriptChunks],
     );
 
     // Handle dismissing an insight as not answered
     const handleDismissNotAnswered = useCallback(
         (analysisId: string) => {
-            // Send update tag message to backend
-            const insight = insights.find((i) => i.analysis_id === analysisId);
-            const newTag =
-                insight?.tag === "starred" ? "starred_dismissed" : "dismissed";
-
-            // Update local state immediately
-            setInsights((prevState) =>
-                prevState.map((insight) => {
-                    if (insight.analysis_id === analysisId) {
-                        return {
-                            ...insight,
-                            tag: newTag,
-                            was_asked: false,
-                            asked_at_transcript_id: null,
-                        };
-                    }
-                    return insight;
-                }),
-            );
-
             ws.sendMessage({
-                type: MessageType.UPDATE_AI_ANALYSIS_TAG,
+                type: MessageType.MARK_AI_ANALYSIS_DISMISSED_NOT_ASKED,
                 timestamp: new Date().toISOString(),
                 analysis_id: analysisId,
-                tag: newTag,
-                was_asked: false,
-                asked_at_transcript_id: null,
             });
         },
-        [ws, insights],
+        [ws],
     );
 
     // Handle undoing a dismiss (restore to active or starred)
     const handleUndoDismiss = useCallback(
         (analysisId: string) => {
-            // Update local state immediately
-            setInsights((prevState) =>
-                prevState.map((insight) => {
-                    if (insight.analysis_id === analysisId) {
-                        // If it was starred_dismissed, restore to starred, otherwise to active (null)
-                        const newTag =
-                            insight.tag === "starred_dismissed"
-                                ? "starred"
-                                : null;
-                        return { ...insight, tag: newTag };
-                    }
-                    return insight;
-                }),
-            );
-
-            // Send update tag message to backend
-            const insight = insights.find((i) => i.analysis_id === analysisId);
-            const newTag =
-                insight?.tag === "starred_dismissed" ? "starred" : null;
             ws.sendMessage({
-                type: MessageType.UPDATE_AI_ANALYSIS_TAG,
+                type: MessageType.UNDO_AI_ANALYSIS_DISMISSAL,
                 timestamp: new Date().toISOString(),
                 analysis_id: analysisId,
-                tag: newTag,
             });
         },
-        [ws, insights],
+        [ws],
     );
 
     const viewportRef = useRef<HTMLDivElement | null>(null);
@@ -577,11 +492,19 @@ export function AudioSender({ projectId }: AudioSenderProps) {
 
     useEffect(() => {
         const handleUpdateAIAnalysisTag = (message: UpdateAIAnalysisTag) => {
-            // Update insight tag in local state
             setInsights((prevState) =>
                 prevState.map((insight) =>
                     insight.analysis_id === message.analysis_id
-                        ? { ...insight, tag: message.tag }
+                        ? {
+                              ...insight,
+                              tag: message.tag,
+                              was_asked: message.was_asked ?? null,
+                              asked_at_transcript_id:
+                                  message.asked_at_transcript_id ?? null,
+                              asked_at: message.asked_at ?? null,
+                              time_tag_changed:
+                                  message.time_tag_changed ?? null,
+                          }
                         : insight,
                 ),
             );

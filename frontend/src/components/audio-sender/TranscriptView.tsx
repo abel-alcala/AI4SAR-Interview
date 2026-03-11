@@ -18,6 +18,7 @@ import {
     downloadTranscript,
     downloadQuestions,
     downloadAudio,
+    downloadReport,
 } from "../../lib/api";
 import { useState } from "react";
 import { TranscriptSection } from "./TranscriptSection";
@@ -109,6 +110,18 @@ export function TranscriptView({
         }
     };
 
+    const handleDownloadReport = async () => {
+        if (!projectId || !auth.user?.access_token) return;
+        try {
+            setDownloading("report");
+            await downloadReport(projectId, auth.user.access_token);
+        } catch (error) {
+            console.error("Failed to download report:", error);
+        } finally {
+            setDownloading(null);
+        }
+    };
+
     return (
         <Paper withBorder shadow="sm" radius="lg" style={{ height: "100%" }}>
             <Stack gap="xs" style={{ height: "100%" }}>
@@ -149,6 +162,13 @@ export function TranscriptView({
 
                                 <Menu.Dropdown>
                                     <Menu.Label>Downloads</Menu.Label>
+                                    <Menu.Item
+                                        leftSection={<IconDownload size={14} />}
+                                        onClick={handleDownloadReport}
+                                        disabled={downloading !== null}
+                                    >
+                                        Download Report
+                                    </Menu.Item>
                                     <Menu.Item
                                         leftSection={<IconDownload size={14} />}
                                         onClick={handleDownloadAudio}
