@@ -689,6 +689,7 @@ def get_analyses_by_ids(
                 models.AIAnalysis.was_asked,
                 models.AIAnalysis.asked_at_transcript_id,
                 models.AIAnalysis.asked_at,
+                models.AIAnalysis.time_tag_changed,
                 sa.func.row_number()
                 .over(order_by=models.AIAnalysis.analysis_id.asc())
                 .label("ordinal"),
