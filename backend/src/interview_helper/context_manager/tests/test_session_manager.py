@@ -99,3 +99,26 @@ async def test_get_settings():
     # Ensure that this causes an error so we don't inadvertently use it in tests
     with pytest.raises(AssertionError):
         cm.get_settings()
+
+
+async def test_teardown_clears_recording_state_for_disconnected_session():
+    context_manager = AppContextManager(
+        (), ai_processer=FakeAnalyzer, db=PersistentDatabase.new_in_memory()
+    )
+    project_id = ProjectId(ULID())
+    ctx = await context_manager.new_session(UserId(ULID()), project_id)
+
+    await context_manager.set_recording_state(
+        project_id=project_id,
+        session_id=ctx.session_id,
+        user_name="Test User",
+        is_recording=True,
+    )
+    assert await context_manager.get_recording_state(project_id) == (
+        ctx.session_id,
+        "Test User",
+    )
+
+    await context_manager.teardown_session(ctx.session_id)
+
+    assert await context_manager.get_recording_state(project_id) is None
