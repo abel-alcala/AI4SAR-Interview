@@ -363,9 +363,21 @@ class AppContextManager:
 
         # Wait for any finishing audio handlers
         event = None
+        recording_state_to_clear: tuple[ProjectId, str] | None = None
         async with self.lock:
             if session_id in self.active_audio_sessions:
                 event = self.cleanup_waiting_event[session_id]
+
+            session_data = self.session_data.get(session_id)
+            if (
+                session_data is not None
+                and session_data.project in self.recording_state
+            ):
+                current_session_id, current_user_name = self.recording_state[
+                    session_data.project
+                ]
+                if current_session_id == session_id:
+                    recording_state_to_clear = (session_data.project, current_user_name)
 
         if event is not None:
             await event.wait()
@@ -400,6 +412,16 @@ class AppContextManager:
             del self.session_task_group[session_id]
 
         _ = await task_group.__aexit__(None, None, None)
+
+        # Ensure we clear stale recording ownership when a websocket disconnects abruptly.
+        if recording_state_to_clear is not None:
+            project_id, user_name = recording_state_to_clear
+            await self.set_recording_state(
+                project_id=project_id,
+                session_id=session_id,
+                user_name=user_name,
+                is_recording=False,
+            )
 
     async def ingest_audio(
         self, session_id: SessionId, project_id: ProjectId, audio_chunk: AudioChunk
