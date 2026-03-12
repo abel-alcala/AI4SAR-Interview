@@ -626,7 +626,7 @@ def generate_report_pdf(project_id: str, db: PersistentDatabase) -> bytes | None
     # Answered questions
     _render_question_sections(
         story,
-        "Answered Questions (Categorized)",
+        "Answered AI-Questions (Categorized)",
         report_data.answered_by_category,
         normal_style,
         heading_style,
@@ -743,7 +743,7 @@ def generate_report_pdf(project_id: str, db: PersistentDatabase) -> bytes | None
     # Unanswered questions
     _render_question_sections(
         story,
-        "Unanswered Questions",
+        "Unanswered AI-Questions",
         report_data.unanswered_by_category,
         normal_style,
         heading_style,
