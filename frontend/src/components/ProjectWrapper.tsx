@@ -24,30 +24,30 @@ export default function ProjectWrapper({
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const auth = useAuth();
-
-    useEffect(() => {
-        const loadProjects = async () => {
+useEffect(() => {
+    const loadProject = async () => {
+        if (projectId) {
             try {
                 setLoading(true);
-                const token = auth.user?.access_token;
+                const token = auth.user?.id_token;
                 if (!token) {
-                    throw new Error("No access token available");
+                    throw new Error("No id token available");
                 }
-                const data = await fetchProjects(token);
-                setProjects(data);
+                const info = await getProjectInfo(projectId, token);
+                setProjectInfo(info);
             } catch (err) {
                 setError(
                     err instanceof Error
                         ? err.message
-                        : "Failed to load projects",
+                        : "Failed to load project",
                 );
             } finally {
                 setLoading(false);
             }
-        };
-
-        loadProjects();
-    }, [auth.user?.access_token]);
+        }
+    };
+    loadProject();
+}, [projectId, auth.user?.id_token]);
 
     if (loading) {
         return (

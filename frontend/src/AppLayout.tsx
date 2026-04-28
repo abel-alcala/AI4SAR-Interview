@@ -44,7 +44,7 @@ export default function AppLayout({
             }
 
             try {
-                const token = auth.user?.access_token;
+                const token = auth.user?.id_token;
                 if (!token) return;
 
                 const projects = await fetchProjects(token);
@@ -56,7 +56,7 @@ export default function AppLayout({
         };
 
         loadProject();
-    }, [projectId, auth.user?.access_token]);
+    }, [projectId, auth.user?.id_token]);
 
     return (
         <AppShell header={{ height: 60 }} padding="md">

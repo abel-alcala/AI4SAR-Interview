@@ -59,7 +59,7 @@ export function useAuthenticatedWebSocket(projectId?: string) {
     }
 
     const connect = async () => {
-        if (!auth.isAuthenticated || !auth.user?.access_token) {
+        if (!auth.isAuthenticated || !auth.user?.id_token) {
             setError("User not authenticated");
             return;
         }
@@ -79,7 +79,7 @@ export function useAuthenticatedWebSocket(projectId?: string) {
             const ticketResponse = await fetch(`${backendUrl}/auth/ticket`, {
                 method: "GET",
                 headers: {
-                    Authorization: `Bearer ${auth.user.access_token}`,
+                    Authorization: `Bearer ${auth.user.id_token}`,
                     "Content-Type": "application/json",
                 },
             });

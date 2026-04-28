@@ -75,10 +75,10 @@ export function TranscriptView({
     const [downloading, setDownloading] = useState<string | null>(null);
 
     const handleDownloadTranscript = async () => {
-        if (!projectId || !auth.user?.access_token) return;
+        if (!projectId || !auth.user?.id_token) return;
         try {
             setDownloading("transcript");
-            await downloadTranscript(projectId, auth.user.access_token);
+            await downloadTranscript(projectId, auth.user.id_token);
         } catch (error) {
             console.error("Failed to download transcript:", error);
         } finally {
@@ -87,10 +87,10 @@ export function TranscriptView({
     };
 
     const handleDownloadQuestions = async () => {
-        if (!projectId || !auth.user?.access_token) return;
+        if (!projectId || !auth.user?.id_token) return;
         try {
             setDownloading("questions");
-            await downloadQuestions(projectId, auth.user.access_token);
+            await downloadQuestions(projectId, auth.user.id_token);
         } catch (error) {
             console.error("Failed to download questions:", error);
         } finally {
@@ -99,10 +99,10 @@ export function TranscriptView({
     };
 
     const handleDownloadAudio = async () => {
-        if (!projectId || !auth.user?.access_token) return;
+        if (!projectId || !auth.user?.id_token) return;
         try {
             setDownloading("audio");
-            await downloadAudio(projectId, auth.user.access_token);
+            await downloadAudio(projectId, auth.user.id_token);
         } catch (error) {
             console.error("Failed to download audio:", error);
         } finally {
@@ -111,10 +111,10 @@ export function TranscriptView({
     };
 
     const handleDownloadReport = async () => {
-        if (!projectId || !auth.user?.access_token) return;
+        if (!projectId || !auth.user?.id_token) return;
         try {
             setDownloading("report");
-            await downloadReport(projectId, auth.user.access_token);
+            await downloadReport(projectId, auth.user.id_token);
         } catch (error) {
             console.error("Failed to download report:", error);
         } finally {

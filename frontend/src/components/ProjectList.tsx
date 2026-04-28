@@ -17,7 +17,7 @@ import {
     Menu,
 } from "@mantine/core";
 import { IconTrash, IconDots } from "@tabler/icons-react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "react-oidc-context";
 import {
     fetchProjects,
@@ -32,8 +32,17 @@ export default function ProjectList() {
     const [projects, setProjects] = useState<ProjectListing[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [createModalOpen, setCreateModalOpen] = useState(false);
-    const [newProjectName, setNewProjectName] = useState("");
+    const [searchParams] = useSearchParams();
+
+    // Capture incidentId and projectName to restore after login
+    const urlIncidentId = searchParams.get("incidentId");
+    const prefillName =
+        sessionStorage.getItem("intellisar_project_name") ??
+        searchParams.get("projectName") ??
+        "";
+
+    const [createModalOpen, setCreateModalOpen] = useState(!!prefillName);
+    const [newProjectName, setNewProjectName] = useState(prefillName);
     const [creating, setCreating] = useState(false);
     const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
 
@@ -50,13 +59,23 @@ export default function ProjectList() {
     const auth = useAuth();
 
     useEffect(() => {
+        // Save incidentId to sessionStorage for Task 5's "Save to IntelliSAR" button
+        if (urlIncidentId) {
+            sessionStorage.setItem("intellisar_incident_id", urlIncidentId);
+        }
+
+        // Clean up projectName from sessionStorage so it doesn't auto-open on future visits
+        if (prefillName) {
+            sessionStorage.removeItem("intellisar_project_name");
+        }
+
         const loadData = async () => {
             try {
                 setLoading(true);
                 setError(null);
-                const token = auth.user?.access_token;
+                const token = auth.user?.id_token;
                 if (!token) {
-                    throw new Error("No access token available");
+                    throw new Error("No id token available");
                 }
                 // Load both user info and projects
                 const [userData, projectsData] = await Promise.all([
@@ -84,9 +103,9 @@ export default function ProjectList() {
 
         try {
             setCreating(true);
-            const token = auth.user?.access_token;
+            const token = auth.user?.id_token;
             if (!token) {
-                throw new Error("No access token available");
+                throw new Error("No id token available");
             }
 
             const newProject = await createProject(newProjectName, token);
@@ -115,9 +134,9 @@ export default function ProjectList() {
         e.stopPropagation(); // Prevent card click
 
         try {
-            const token = auth.user?.access_token;
+            const token = auth.user?.id_token;
             if (!token) {
-                throw new Error("No access token available");
+                throw new Error("No id token available");
             }
 
             // Fetch full project info including session count
@@ -141,9 +160,9 @@ export default function ProjectList() {
         try {
             setDeleting(true);
             setDeleteError(null);
-            const token = auth.user?.access_token;
+            const token = auth.user?.id_token;
             if (!token) {
-                throw new Error("No access token available");
+                throw new Error("No id token available");
             }
 
             await deleteProject(projectToDelete.id, deleteConfirmName, token);

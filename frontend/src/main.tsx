@@ -4,7 +4,7 @@ import "./index.css";
 import "normalize.css";
 import App from "./App.tsx";
 import { AuthProvider } from "react-oidc-context";
-import { OIDC_AUTHORITY, OIDC_CLIENT_ID, SITE_URL } from "./constants.ts";
+import { OIDC_AUTHORITY, OIDC_CLIENT_ID, SITE_URL, OIDC_CLIENT_SECRET } from "./constants.ts";
 
 console.log("OIDC Config:", {
     authority: OIDC_AUTHORITY,
@@ -16,6 +16,7 @@ console.log("OIDC Config:", {
 const oidc_config = {
     authority: OIDC_AUTHORITY,
     client_id: OIDC_CLIENT_ID,
+    client_secret: OIDC_CLIENT_SECRET,
     redirect_uri: `${SITE_URL}/auth/callback`,
     response_type: "code",
     scope: "openid profile email",

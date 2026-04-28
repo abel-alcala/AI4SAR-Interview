@@ -56,6 +56,7 @@ def verify_jwt_token(
         token,
         key=signing_key,
         algorithms=signing_algos,
+        audience=client_id,
     )
 
     # We expect a standard JWT payload dict here
@@ -79,6 +80,30 @@ class OIDCUserInfo(BaseModel):
     phone_number: str | None = None
     phone_number_verified: bool | None = None
     custom_attributes: dict[str, Any] = {}  # pyright: ignore[reportExplicitAny]
+
+
+def extract_user_info_from_token_claims(claims: TokenClaims) -> OIDCUserInfo:
+    """
+    Extract user profile info directly from JWT claims instead of calling
+    the OIDC userinfo endpoint.
+    Since Google ID tokens already contain name/email claims, making a separate
+    userinfo call unnecessary and avoiding the access-token-vs-id-token mismatch.
+    """
+    given_name: str | None = None
+    family_name: str | None = None
+
+    if claims.name:
+        parts = claims.name.split(" ", 1)
+        given_name = parts[0]
+        family_name = parts[1] if len(parts) > 1 else None
+
+    return OIDCUserInfo(
+        sub=claims.sub,
+        email=claims.email,
+        name=claims.name,
+        given_name=given_name,
+        family_name=family_name,
+    )
 
 
 async def get_user_info_from_oidc_provider(

@@ -1,5 +1,6 @@
 import "@mantine/core/styles.css";
 
+import { useEffect } from "react";
 import { MantineProvider, Container } from "@mantine/core";
 import { useAuth } from "react-oidc-context";
 import {
@@ -37,6 +38,30 @@ function ProjectPage() {
 function AppContent() {
     const auth = useAuth();
     const location = useLocation();
+
+    // Auto sign-in when launched from IntelliSAR (URL contains ?incidentId=)
+    useEffect(() => {
+        if (!auth.isAuthenticated && !auth.isLoading && !auth.activeNavigator) {
+            const params = new URLSearchParams(window.location.search);
+            if (params.has("incidentId")) {
+                const loginHint = params.get("login_hint");
+
+                // Strip login_hint from returnTo so it doesnt appear after login
+                const returnParams = new URLSearchParams(window.location.search);
+                returnParams.delete("login_hint");
+                const returnTo = returnParams.toString()
+                    ? `?${returnParams.toString()}`
+                    : "";
+
+                auth.signinRedirect({
+                    state: { returnTo },
+                    extraQueryParams: loginHint
+                        ? { login_hint: loginHint }
+                        : undefined,
+                });
+            }
+        }
+    }, [auth, auth.isAuthenticated, auth.isLoading, auth.activeNavigator]);
 
     // Handle callback route
     if (location.pathname === "/auth/callback") {

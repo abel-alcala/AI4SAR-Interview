@@ -5,12 +5,14 @@ export default function AuthCallback() {
     const auth = useAuth();
 
     useEffect(() => {
-        // The auth library automatically handles the callback
         if (auth.isAuthenticated) {
-            // Redirect to main app after successful authentication
-            window.location.href = "/";
+            // Restore original URL params if launched from IntelliSAR
+            const returnTo =
+                (auth.user?.state as { returnTo?: string } | null)?.returnTo ??
+                "";
+            window.location.href = `/${returnTo}`;
         }
-    }, [auth.isAuthenticated]);
+    }, [auth.isAuthenticated, auth.user?.state]);
 
     if (auth.error) {
         return (

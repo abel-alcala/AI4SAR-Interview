@@ -27,6 +27,7 @@ from interview_helper.security.http import (
     verify_jwt_token,
     get_user_info_from_oidc_provider,
     get_oidc_userinfo_endpoint,
+    extract_user_info_from_token_claims,
 )
 from interview_helper.security.tickets import TicketResponse
 from typing import Annotated
@@ -258,7 +259,10 @@ async def generate_websocket_ticket(
         )
 
     client_ip = request.client.host
-    user_info = await get_user_info_from_oidc_provider(clean_token, userinfo_endpoint)
+    if user_claims.name or user_claims.email:
+        user_info = extract_user_info_from_token_claims(user_claims)
+    else:
+        user_info = await get_user_info_from_oidc_provider(clean_token, userinfo_endpoint)
 
     name = f"{user_info.given_name or ''} {user_info.family_name or ''}".strip()
     user_id = get_or_add_user_by_oidc_id(
@@ -495,7 +499,10 @@ async def get_current_user(token: Annotated[str, Depends(oidc_scheme)]):
     clean_token = token.removeprefix("Bearer ")
     user_claims = verify_jwt_token(clean_token, jwks_client, CLIENT_ID, signing_algos)
 
-    user_info = await get_user_info_from_oidc_provider(clean_token, userinfo_endpoint)
+    if user_claims.name or user_claims.email:
+        user_info = extract_user_info_from_token_claims(user_claims)
+    else:
+        user_info = await get_user_info_from_oidc_provider(clean_token, userinfo_endpoint)
     name = f"{user_info.given_name or ''} {user_info.family_name or ''}".strip()
     user = get_or_add_user_by_oidc_id(session_manager.db, user_claims.sub, name)
 
@@ -526,7 +533,10 @@ async def create_project(
     clean_token = token.removeprefix("Bearer ")
     user_claims = verify_jwt_token(clean_token, jwks_client, CLIENT_ID, signing_algos)
 
-    user_info = await get_user_info_from_oidc_provider(clean_token, userinfo_endpoint)
+    if user_claims.name or user_claims.email:
+        user_info = extract_user_info_from_token_claims(user_claims)
+    else:
+        user_info = await get_user_info_from_oidc_provider(clean_token, userinfo_endpoint)
 
     name = f"{user_info.given_name or ''} {user_info.family_name or ''}".strip()
     user_id = get_or_add_user_by_oidc_id(
@@ -553,7 +563,10 @@ async def delete_project_endpoint(
     user_claims = verify_jwt_token(clean_token, jwks_client, CLIENT_ID, signing_algos)
 
     # Get user info
-    user_info = await get_user_info_from_oidc_provider(clean_token, userinfo_endpoint)
+    if user_claims.name or user_claims.email:
+        user_info = extract_user_info_from_token_claims(user_claims)
+    else:
+        user_info = await get_user_info_from_oidc_provider(clean_token, userinfo_endpoint)
     name = f"{user_info.given_name or ''} {user_info.family_name or ''}".strip()
     user_id = get_or_add_user_by_oidc_id(
         session_manager.db, user_claims.sub, name
