@@ -412,6 +412,70 @@ def build_report_data(project_id: str, db: PersistentDatabase) -> ReportData | N
     )
 
 
+def serialize_report_data(
+    report_data: ReportData,
+    project_id: str,
+    incident_id: str,
+    exported_at: datetime,
+) -> dict[str, object]:
+    """Serialize ReportData to a JSON-safe dict for Firestore / AI model consumption."""
+
+    def _iso(dt: datetime) -> str:
+        return dt.astimezone(timezone.utc).isoformat()
+
+    def _serialize_question(entry: ReportQuestionEntry) -> dict[str, object]:
+        q: dict[str, object] = {
+            "ordinal": entry.ordinal,
+            "category_code": entry.category_code,
+            "category_label": QUESTION_CATEGORY_LABELS.get(entry.category_code, "Unknown"),
+            "text": entry.text,
+            "context_span": entry.span,
+            "is_starred": entry.is_starred,
+        }
+        if entry.answered_at_text is not None:
+            q["answered_at"] = entry.answered_at_text
+        if entry.transcript_excerpt is not None:
+            q["transcript_excerpt"] = entry.transcript_excerpt
+        return q
+
+    answered: list[dict[str, object]] = []
+    for code in QUESTION_CATEGORY_ORDER:
+        for entry in report_data.answered_by_category.get(code, []):
+            answered.append(_serialize_question(entry))
+
+    unanswered: list[dict[str, object]] = []
+    for code in QUESTION_CATEGORY_ORDER:
+        for entry in report_data.unanswered_by_category.get(code, []):
+            unanswered.append(_serialize_question(entry))
+
+    transcript = [
+        {
+            "speaker": section.speaker,
+            "text": section.text,
+            "started_at": _iso(section.started_at),
+            "ended_at": _iso(section.ended_at),
+        }
+        for section in report_data.transcript_sections
+    ]
+
+    return {
+        "schema_version": "1.0",
+        "project_id": project_id,
+        "project_name": report_data.project_name,
+        "incident_id": incident_id,
+        "exported_at": _iso(exported_at),
+        "interview": {
+            "start_time": _iso(report_data.start_time),
+            "total_duration_seconds": int(report_data.total_duration.total_seconds()),
+        },
+        "transcript": transcript,
+        "questions": {
+            "answered": answered,
+            "unanswered": unanswered,
+        },
+    }
+
+
 def _render_question_sections(
     story: list[Flowable],
     title: str,

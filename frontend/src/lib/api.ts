@@ -230,6 +230,12 @@ export async function getProjectInfo(
 }
 
 /**
+ * Push the completed interview report to IntelliSAR's Firebase under
+ * incidents/{incidentId}/ai_interview. Reads intellisar_incident_id from
+ * sessionStorage (set by ProjectList on launch). Does not require the
+ * IntelliSAR window to be open.
+ */
+/**
  * Delete a project
  */
 export async function deleteProject(

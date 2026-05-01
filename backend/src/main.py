@@ -81,7 +81,7 @@ import wave
 import tempfile
 import sqlalchemy as sa
 from interview_helper.downloads.get_transcript import generate_transcript
-from interview_helper.downloads.get_report import generate_report_pdf
+from interview_helper.downloads.get_report import generate_report_pdf, build_report_data, serialize_report_data
 from interview_helper.context_manager import models
 
 # Configure logging
@@ -752,6 +752,67 @@ async def download_report(project_id: str, token: Annotated[str, Depends(oidc_sc
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{safe_filename}"'},
     )
+
+
+@app.post("/project/{project_id}/push/firebase")
+async def push_to_firebase(
+    project_id: str,
+    incident_id: str,
+    token: Annotated[str, Depends(oidc_scheme)],
+):
+    """
+    Serialize the interview report as structured JSON and write it to Firestore
+    under incidents/{incident_id}/ai_interview.
+    """
+    import json
+    import firebase_admin  # pyright: ignore[reportMissingTypeStubs]
+    from firebase_admin import credentials, firestore  # pyright: ignore[reportMissingTypeStubs]
+
+    clean_token = token.removeprefix("Bearer ")
+    _ = verify_jwt_token(clean_token, jwks_client, CLIENT_ID, signing_algos)
+
+    if not settings.firebase_service_account_key:
+        raise HTTPException(
+            status_code=503,
+            detail="Firebase export is not configured on this server.",
+        )
+
+    project_id_typed = ProjectId.from_str(project_id)
+    project = get_project_by_id(session_manager.db, project_id_typed)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    report_data = build_report_data(project_id=project_id, db=session_manager.db)
+    if report_data is None:
+        raise HTTPException(
+            status_code=404, detail="No transcriptions found for this project"
+        )
+
+    payload = serialize_report_data(
+        report_data=report_data,
+        project_id=project_id,
+        incident_id=incident_id,
+    )
+
+    try:
+        firebase_admin.get_app()
+    except ValueError:
+        sa_dict = json.loads(settings.firebase_service_account_key)
+        cred = credentials.Certificate(sa_dict)
+        _ = firebase_admin.initialize_app(cred)
+
+    db_client = firestore.client()
+    db_client.collection("incidents").document(incident_id).set(
+        {"ai_interview": payload}, merge=True
+    )
+
+    logger.info(
+        "Pushed interview report for project %s to Firebase incident %s",
+        project_id,
+        incident_id,
+    )
+
+    return {"status": "success", "incident_id": incident_id, "project_id": project_id}
 
 
 @app.get("/project/{project_id}/download/audio")

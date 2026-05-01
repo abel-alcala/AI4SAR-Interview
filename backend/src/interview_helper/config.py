@@ -77,6 +77,10 @@ class Settings(BaseSettings):
     LANGFUSE_PUBLIC_KEY: str | None = Field(alias="LANGFUSE_PUBLIC_KEY", default=None)
     LANGFUSE_BASE_URL: str | None = Field(alias="LANGFUSE_BASE_URL", default=None)
 
+    firebase_service_account_key: str | None = Field(
+        alias="FIREBASE_SERVICE_ACCOUNT_KEY", default=None
+    )
+
     @model_validator(mode="after")
     def check_azure_fields_together(self):
         if (self.azure_speech_key is None) != (self.azure_speech_region is None):

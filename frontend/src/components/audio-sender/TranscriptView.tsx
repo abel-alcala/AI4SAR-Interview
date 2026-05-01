@@ -12,13 +12,14 @@ import {
     Menu,
     ActionIcon,
 } from "@mantine/core";
-import { IconDownload } from "@tabler/icons-react";
+import { IconDownload, IconCloudUpload } from "@tabler/icons-react";
 import { useAuth } from "react-oidc-context";
 import {
     downloadTranscript,
     downloadQuestions,
     downloadAudio,
     downloadReport,
+    saveToIntelliSAR,
 } from "../../lib/api";
 import { useState } from "react";
 import { TranscriptSection } from "./TranscriptSection";
@@ -122,6 +123,19 @@ export function TranscriptView({
         }
     };
 
+    const handleSaveToIntelliSAR = async () => {
+        if (!projectId || !auth.user?.id_token) return;
+        try {
+            setDownloading("saving");
+            await saveToIntelliSAR(projectId, projectName, auth.user.id_token);
+        } catch (error) {
+            console.error("Failed to save to IntelliSAR:", error);
+            alert("Export failed. Please try again or use the download buttons.");
+        } finally {
+            setDownloading(null);
+        }
+    };
+
     return (
         <Paper withBorder shadow="sm" radius="lg" style={{ height: "100%" }}>
             <Stack gap="xs" style={{ height: "100%" }}>
@@ -189,6 +203,15 @@ export function TranscriptView({
                                         disabled={downloading !== null}
                                     >
                                         Download Questions
+                                    </Menu.Item>
+                                    <Menu.Divider />
+                                    <Menu.Label>IntelliSAR</Menu.Label>
+                                    <Menu.Item
+                                        leftSection={<IconCloudUpload size={14} />}
+                                        onClick={handleSaveToIntelliSAR}
+                                        disabled={downloading !== null}
+                                    >
+                                        Save to IntelliSAR
                                     </Menu.Item>
                                 </Menu.Dropdown>
                             </Menu>
