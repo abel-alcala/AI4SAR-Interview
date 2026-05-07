@@ -235,6 +235,50 @@ export async function getProjectInfo(
  * sessionStorage (set by ProjectList on launch). Does not require the
  * IntelliSAR window to be open.
  */
+export async function saveToIntelliSAR(
+    projectId: string,
+    _projectName: string | null,
+    token: string,
+): Promise<void> {
+    const incidentId = sessionStorage.getItem("intellisar_incident_id");
+
+    if (!incidentId) {
+        alert(
+            "This interview was not launched from IntelliSAR, or the session has expired. " +
+                "Use the download buttons to export your files manually.",
+        );
+        return;
+    }
+
+    let response: Response;
+    try {
+        response = await fetch(
+            `${BACKEND_URL}/project/${projectId}/push/firebase?incident_id=${encodeURIComponent(incidentId)}`,
+            {
+                method: "POST",
+                headers: { Authorization: `Bearer ${token}` },
+            },
+        );
+    } catch (networkError) {
+        throw new Error(
+            `Network error reaching backend at ${BACKEND_URL}. ` +
+                `Is the backend running? (${networkError instanceof Error ? networkError.message : networkError})`,
+        );
+    }
+
+    if (!response.ok) {
+        const body = await response.text().catch(() => "");
+        let detail: string;
+        try {
+            const json = JSON.parse(body);
+            detail = json.detail ?? body;
+        } catch {
+            detail = body || response.statusText;
+        }
+        throw new Error(`Backend returned ${response.status}: ${detail}`);
+    }
+}
+
 /**
  * Delete a project
  */

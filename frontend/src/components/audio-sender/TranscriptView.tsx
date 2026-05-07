@@ -129,8 +129,9 @@ export function TranscriptView({
             setDownloading("saving");
             await saveToIntelliSAR(projectId, projectName, auth.user.id_token);
         } catch (error) {
-            console.error("Failed to save to IntelliSAR:", error);
-            alert("Export failed. Please try again or use the download buttons.");
+            const message = error instanceof Error ? error.message : String(error);
+            console.error("Failed to save to IntelliSAR:", message);
+            alert(`Export to IntelliSAR failed:\n\n${message}`);
         } finally {
             setDownloading(null);
         }

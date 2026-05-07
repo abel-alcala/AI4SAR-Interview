@@ -34,15 +34,10 @@ export default function ProjectList() {
     const [error, setError] = useState<string | null>(null);
     const [searchParams] = useSearchParams();
 
-    // Capture incidentId and projectName to restore after login
     const urlIncidentId = searchParams.get("incidentId");
-    const prefillName =
-        sessionStorage.getItem("intellisar_project_name") ??
-        searchParams.get("projectName") ??
-        "";
 
-    const [createModalOpen, setCreateModalOpen] = useState(!!prefillName);
-    const [newProjectName, setNewProjectName] = useState(prefillName);
+    const [createModalOpen, setCreateModalOpen] = useState(false);
+    const [newProjectName, setNewProjectName] = useState("");
     const [creating, setCreating] = useState(false);
     const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
 
@@ -59,14 +54,9 @@ export default function ProjectList() {
     const auth = useAuth();
 
     useEffect(() => {
-        // Save incidentId to sessionStorage for Task 5's "Save to IntelliSAR" button
+        // Save incidentId to sessionStorage for the "Save to IntelliSAR" button
         if (urlIncidentId) {
             sessionStorage.setItem("intellisar_incident_id", urlIncidentId);
-        }
-
-        // Clean up projectName from sessionStorage so it doesn't auto-open on future visits
-        if (prefillName) {
-            sessionStorage.removeItem("intellisar_project_name");
         }
 
         const loadData = async () => {

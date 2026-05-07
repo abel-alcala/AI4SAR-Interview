@@ -39,6 +39,7 @@ import logging
 import httpx
 import jwt
 import time
+from datetime import datetime, timezone
 from collections import defaultdict
 
 from interview_helper.config import Settings
@@ -80,6 +81,7 @@ from pathlib import Path
 import wave
 import tempfile
 import sqlalchemy as sa
+
 from interview_helper.downloads.get_transcript import generate_transcript
 from interview_helper.downloads.get_report import generate_report_pdf, build_report_data, serialize_report_data
 from interview_helper.context_manager import models
@@ -792,19 +794,24 @@ async def push_to_firebase(
         report_data=report_data,
         project_id=project_id,
         incident_id=incident_id,
+        exported_at=datetime.fromtimestamp(time.time(), tz=timezone.utc)
     )
 
     try:
-        firebase_admin.get_app()
-    except ValueError:
-        sa_dict = json.loads(settings.firebase_service_account_key)
-        cred = credentials.Certificate(sa_dict)
-        _ = firebase_admin.initialize_app(cred)
+        try:
+            firebase_admin.get_app()
+        except ValueError:
+            sa_dict = json.loads(settings.firebase_service_account_key)
+            cred = credentials.Certificate(sa_dict)
+            _ = firebase_admin.initialize_app(cred)
 
-    db_client = firestore.client()
-    db_client.collection("incidents").document(incident_id).set(
-        {"ai_interview": payload}, merge=True
-    )
+        db_client = firestore.client()
+        db_client.collection("incidents").document(incident_id).set(
+            {"ai_interview": payload}, merge=True
+        )
+    except Exception as exc:
+        logger.error("Firebase push failed for project %s: %s", project_id, exc)
+        raise HTTPException(status_code=502, detail=f"Firebase write failed: {exc}") from exc
 
     logger.info(
         "Pushed interview report for project %s to Firebase incident %s",

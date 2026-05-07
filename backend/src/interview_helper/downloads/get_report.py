@@ -432,8 +432,6 @@ def serialize_report_data(
             "context_span": entry.span,
             "is_starred": entry.is_starred,
         }
-        if entry.answered_at_text is not None:
-            q["answered_at"] = entry.answered_at_text
         if entry.transcript_excerpt is not None:
             q["transcript_excerpt"] = entry.transcript_excerpt
         return q
@@ -452,8 +450,6 @@ def serialize_report_data(
         {
             "speaker": section.speaker,
             "text": section.text,
-            "started_at": _iso(section.started_at),
-            "ended_at": _iso(section.ended_at),
         }
         for section in report_data.transcript_sections
     ]
@@ -465,7 +461,6 @@ def serialize_report_data(
         "incident_id": incident_id,
         "exported_at": _iso(exported_at),
         "interview": {
-            "start_time": _iso(report_data.start_time),
             "total_duration_seconds": int(report_data.total_duration.total_seconds()),
         },
         "transcript": transcript,
