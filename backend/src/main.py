@@ -516,21 +516,28 @@ async def get_current_user(token: Annotated[str, Depends(oidc_scheme)]):
 
 
 @app.get("/project")
-async def list_all_projects(token: Annotated[str, Depends(oidc_scheme)]):
+async def list_all_projects(
+    token: Annotated[str, Depends(oidc_scheme)],
+    incident_id: str | None = None,
+):
     """
-    Returns all projects with details
+    Returns all projects with details. When incident_id is provided, only projects
+    tagged with that incident are returned.
     """
     clean_token = token.removeprefix("Bearer ")
     _user_claims = verify_jwt_token(clean_token, jwks_client, CLIENT_ID, signing_algos)
-    return get_all_projects(session_manager.db)
+    return get_all_projects(session_manager.db, incident_id=incident_id)
 
 
 @app.post("/project")
 async def create_project(
-    project_name: str, token: Annotated[str, Depends(oidc_scheme)]
+    project_name: str,
+    token: Annotated[str, Depends(oidc_scheme)],
+    incident_id: str | None = None,
 ) -> ProjectListing:
     """
-    Creates a new project
+    Creates a new project. When incident_id is provided, the project is tagged
+    with that incident for later filtering.
     """
     clean_token = token.removeprefix("Bearer ")
     user_claims = verify_jwt_token(clean_token, jwks_client, CLIENT_ID, signing_algos)
@@ -546,7 +553,7 @@ async def create_project(
     ).user_id
 
     new_project: ProjectListing = create_new_project(
-        session_manager.db, user_id, project_name
+        session_manager.db, user_id, project_name, incident_id=incident_id
     )
 
     return new_project

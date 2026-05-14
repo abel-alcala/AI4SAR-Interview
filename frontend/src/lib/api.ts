@@ -51,21 +51,29 @@ export async function getCurrentUser(token: string): Promise<CurrentUser> {
 }
 
 /**
- * Fetch all projects from the backend
+ * Fetch all projects from the backend. When incidentId is provided, only
+ * projects tagged with that incident are returned.
  */
-export async function fetchProjects(token: string): Promise<ProjectListing[]> {
-    return authenticatedFetch<ProjectListing[]>("/project", token);
+export async function fetchProjects(token: string, incidentId?: string): Promise<ProjectListing[]> {
+    const endpoint = incidentId
+        ? `/project?incident_id=${encodeURIComponent(incidentId)}`
+        : "/project";
+    return authenticatedFetch<ProjectListing[]>(endpoint, token);
 }
 
 /**
- * Create a new project
+ * Create a new project. When incidentId is provided, the project is tagged
+ * with that incident for later filtering.
  */
 export async function createProject(
     projectName: string,
     token: string,
+    incidentId?: string,
 ): Promise<ProjectListing> {
+    const params = new URLSearchParams({ project_name: projectName });
+    if (incidentId) params.append("incident_id", incidentId);
     return authenticatedFetch<ProjectListing>(
-        `/project?project_name=${encodeURIComponent(projectName)}`,
+        `/project?${params}`,
         token,
         { method: "POST" },
     );

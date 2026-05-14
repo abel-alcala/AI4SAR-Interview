@@ -374,27 +374,32 @@ class ProjectListing(TypedDict):
     created_at: str
 
 
-def get_all_projects(db: PersistentDatabase) -> Sequence[ProjectListing]:
+def get_all_projects(
+    db: PersistentDatabase, incident_id: str | None = None
+) -> Sequence[ProjectListing]:
     """
-    Gets all projects with creator name and creation date, sorted by creation date (descending)
+    Gets all projects with creator name and creation date, sorted by creation date (descending).
+    When incident_id is provided, only projects tagged with that incident are returned.
     """
     with db.begin() as conn:
-        rows: Sequence[tuple[str, str, str, str, DateTime]] = (
-            conn.execute(
-                sa.select(
-                    models.Project.project_id,
-                    models.Project.name,
-                    models.User.full_name,
-                    models.Project.creator_user_id,
-                    models.Project.created_at,
-                )
-                .join(
-                    models.User, models.Project.creator_user_id == models.User.user_id
-                )
-                .order_by(models.Project.created_at.desc())
+        query = (
+            sa.select(
+                models.Project.project_id,
+                models.Project.name,
+                models.User.full_name,
+                models.Project.creator_user_id,
+                models.Project.created_at,
             )
-            .tuples()
-            .all()
+            .join(
+                models.User, models.Project.creator_user_id == models.User.user_id
+            )
+            .order_by(models.Project.created_at.desc())
+        )
+        if incident_id is not None:
+            query = query.where(models.Project.incident_id == incident_id)
+
+        rows: Sequence[tuple[str, str, str, str, DateTime]] = (
+            conn.execute(query).tuples().all()
         )
 
     projects: list[ProjectListing] = []
@@ -413,7 +418,10 @@ def get_all_projects(db: PersistentDatabase) -> Sequence[ProjectListing]:
 
 
 def create_new_project(
-    db: PersistentDatabase, user_id: UserId, project_name: str
+    db: PersistentDatabase,
+    user_id: UserId,
+    project_name: str,
+    incident_id: str | None = None,
 ) -> ProjectListing:
     """
     Creates a new project and returns the project ID
@@ -431,6 +439,7 @@ def create_new_project(
                 "project_id": project_id,
                 "creator_user_id": str(user.user_id),
                 "name": project_name,
+                "incident_id": incident_id,
             },
         )
 

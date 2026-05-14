@@ -70,7 +70,7 @@ export default function ProjectList() {
                 // Load both user info and projects
                 const [userData, projectsData] = await Promise.all([
                     getCurrentUser(token),
-                    fetchProjects(token),
+                    fetchProjects(token, urlIncidentId ?? undefined),
                 ]);
                 setCurrentUser(userData);
                 setProjects(projectsData);
@@ -98,7 +98,7 @@ export default function ProjectList() {
                 throw new Error("No id token available");
             }
 
-            const newProject = await createProject(newProjectName, token);
+            const newProject = await createProject(newProjectName, token, urlIncidentId ?? undefined);
             setProjects([...projects, newProject]);
             setCreateModalOpen(false);
             setNewProjectName("");

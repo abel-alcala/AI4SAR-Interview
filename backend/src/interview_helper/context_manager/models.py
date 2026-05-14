@@ -16,7 +16,7 @@ class Base(DeclarativeBase):
 class User(Base):
     __tablename__: str = "users"
     user_id: Mapped[str] = mapped_column(sa.String(26), primary_key=True)
-    full_name: Mapped[str] = mapped_column(sa.String(100), nullable=False, unique=True)
+    full_name: Mapped[str] = mapped_column(sa.String(100), nullable=False)
     oidc_id: Mapped[str] = mapped_column(sa.String(255), nullable=False, unique=True)
     updated_at: Mapped[DateTime] = mapped_column(
         sa.DateTime(timezone=True),
@@ -136,3 +136,5 @@ class Project(Base):
         server_default=sa.func.now(),
         onupdate=sa.func.now(),
     )
+
+    incident_id: Mapped[str | None] = mapped_column(sa.String(255), nullable=True)
