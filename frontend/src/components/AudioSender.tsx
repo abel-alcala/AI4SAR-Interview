@@ -545,7 +545,9 @@ export function AudioSender({ projectId }: AudioSenderProps) {
 
     function startSendingAudio() {
         if (webrtcClient.current) {
-            webrtcClient.current.startAudioStream();
+            webrtcClient.current.startAudioStream().catch((e: unknown) => {
+                console.error("Recording start failed:", e);
+            });
         }
     }
 

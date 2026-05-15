@@ -56,44 +56,50 @@ export function createWebRTCClient({
     async function startAudioStream() {
         onConnectionChange("connecting");
         console.log("Starting audio stream...");
-        pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+        try {
+            pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
 
-        pc.onicecandidate = (event) => {
-            if (event.candidate) {
-                console.log("Sending ICE candidate:", event.candidate);
-                sendMessage({
-                    type: "ice_candidate",
-                    data: {
-                        candidate: event.candidate,
-                    },
-                });
-            }
-        };
+            pc.onicecandidate = (event) => {
+                if (event.candidate) {
+                    console.log("Sending ICE candidate:", event.candidate);
+                    sendMessage({
+                        type: "ice_candidate",
+                        data: {
+                            candidate: event.candidate,
+                        },
+                    });
+                }
+            };
 
-        pc.onconnectionstatechange = () => {
-            if (pc.connectionState === "connected") {
-                onConnectionChange("connected");
-            } else if (pc.connectionState === "disconnected") {
-                onConnectionChange("disconnected");
-            }
-            if (pc.connectionState === "failed") {
-                onConnectionChange("failed");
-            }
-        };
+            pc.onconnectionstatechange = () => {
+                if (pc.connectionState === "connected") {
+                    onConnectionChange("connected");
+                } else if (pc.connectionState === "disconnected") {
+                    onConnectionChange("disconnected");
+                }
+                if (pc.connectionState === "failed") {
+                    onConnectionChange("failed");
+                }
+            };
 
-        localStream = await setupLocalStream();
+            localStream = await setupLocalStream();
 
-        // Add local stream to peer
-        console.log("Adding local stream to peer connection");
-        localStream.getTracks().forEach((track) => {
-            pc.addTrack(track, localStream);
-        });
+            // Add local stream to peer
+            console.log("Adding local stream to peer connection");
+            localStream.getTracks().forEach((track) => {
+                pc.addTrack(track, localStream);
+            });
 
-        console.log("Creating offer...");
-        await createAndSendOffer(pc, {
-            sendMessage,
-        });
-        console.log("Offer sent, waiting for answer...");
+            console.log("Creating offer...");
+            await createAndSendOffer(pc, {
+                sendMessage,
+            });
+            console.log("Offer sent, waiting for answer...");
+        } catch (e) {
+            console.error("Failed to start audio stream:", e);
+            onConnectionChange("disconnected");
+            throw e;
+        }
     }
 
     async function stopAudioStream() {
