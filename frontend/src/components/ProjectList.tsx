@@ -35,6 +35,7 @@ export default function ProjectList() {
     const [searchParams] = useSearchParams();
 
     const urlIncidentId = searchParams.get("incidentId");
+    const urlProjectName = searchParams.get("projectName");
 
     const [createModalOpen, setCreateModalOpen] = useState(false);
     const [newProjectName, setNewProjectName] = useState("");
@@ -188,7 +189,9 @@ export default function ProjectList() {
     return (
         <Container size="xl" py="xl">
             <Group justify="space-between" mb="xl">
-                <Title order={1}>My Projects</Title>
+                <Title order={1}>
+                    {urlIncidentId && urlProjectName ? urlProjectName : "My Projects"}
+                </Title>
                 <Button onClick={() => setCreateModalOpen(true)} size="md">
                     Create Project
                 </Button>

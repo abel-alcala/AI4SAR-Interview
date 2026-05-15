@@ -522,11 +522,24 @@ async def list_all_projects(
 ):
     """
     Returns all projects with details. When incident_id is provided, only projects
-    tagged with that incident are returned.
+    tagged with that incident are returned. Otherwise, only the current user's projects
+    are returned.
     """
     clean_token = token.removeprefix("Bearer ")
-    _user_claims = verify_jwt_token(clean_token, jwks_client, CLIENT_ID, signing_algos)
-    return get_all_projects(session_manager.db, incident_id=incident_id)
+    user_claims = verify_jwt_token(clean_token, jwks_client, CLIENT_ID, signing_algos)
+
+    if incident_id is not None:
+        return get_all_projects(session_manager.db, incident_id=incident_id)
+
+    if user_claims.name or user_claims.email:
+        user_info = extract_user_info_from_token_claims(user_claims)
+    else:
+        user_info = await get_user_info_from_oidc_provider(clean_token, userinfo_endpoint)
+
+    name = f"{user_info.given_name or ''} {user_info.family_name or ''}".strip()
+    user_id = get_or_add_user_by_oidc_id( session_manager.db, user_claims.sub, name).user_id
+
+    return get_all_projects(session_manager.db, user_id=str(user_id))
 
 
 @app.post("/project")

@@ -375,11 +375,14 @@ class ProjectListing(TypedDict):
 
 
 def get_all_projects(
-    db: PersistentDatabase, incident_id: str | None = None
+    db: PersistentDatabase,
+    incident_id: str | None = None,
+    user_id: str | None = None,
 ) -> Sequence[ProjectListing]:
     """
     Gets all projects with creator name and creation date, sorted by creation date (descending).
     When incident_id is provided, only projects tagged with that incident are returned.
+    When neither is provided (or as fallback), filters by user_id to show only that user's projects.
     """
     with db.begin() as conn:
         query = (
@@ -397,6 +400,8 @@ def get_all_projects(
         )
         if incident_id is not None:
             query = query.where(models.Project.incident_id == incident_id)
+        elif user_id is not None:
+            query = query.where(models.Project.creator_user_id == user_id)
 
         rows: Sequence[tuple[str, str, str, str, DateTime]] = (
             conn.execute(query).tuples().all()
