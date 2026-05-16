@@ -8,10 +8,21 @@ const BACKEND = BACKEND_URL + "/ws";
 
 export const SIGNALING_SERVER_URL = toWebSocketUrl(BACKEND);
 
-export const ICE_SERVERS = [
-    { urls: "stun:stun.l.google.com:19302" },
-    // { urls: 'turn:your.turn.server:3478', username: 'user', credential: 'pass' }
-];
+function getIceServers(): RTCIceServer[] {
+    const servers: RTCIceServer[] = [{ urls: "stun:stun.l.google.com:19302" }];
+    const username = import.meta.env.VITE_METERED_TURN_USERNAME;
+    const credential = import.meta.env.VITE_METERED_TURN_CREDENTIAL;
+    if (username && credential) {
+        servers.push(
+            { urls: "stun:stun.relay.metered.ca:80" },
+            { urls: "turn:a.relay.metered.ca:80", username, credential },
+            { urls: "turn:a.relay.metered.ca:80?transport=tcp", username, credential },
+            { urls: "turn:a.relay.metered.ca:443", username, credential },
+            { urls: "turns:a.relay.metered.ca:443?transport=tcp", username, credential },
+        );
+    }
+    return servers;
+}
 
 /**
  * BadConfiguration error
@@ -57,7 +68,7 @@ export function createWebRTCClient({
         onConnectionChange("connecting");
         console.log("Starting audio stream...");
         try {
-            pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+            pc = new RTCPeerConnection({ iceServers: getIceServers() });
 
             pc.onicecandidate = (event) => {
                 if (event.candidate) {
