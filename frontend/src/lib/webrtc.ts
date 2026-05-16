@@ -68,6 +68,9 @@ export function createWebRTCClient({
         onConnectionChange("connecting");
         console.log("Starting audio stream...");
         try {
+            if (pc) {
+                pc.close();
+            }
             pc = new RTCPeerConnection({ iceServers: getIceServers() });
 
             pc.onicecandidate = (event) => {
@@ -85,11 +88,11 @@ export function createWebRTCClient({
             pc.onconnectionstatechange = () => {
                 if (pc.connectionState === "connected") {
                     onConnectionChange("connected");
-                } else if (pc.connectionState === "disconnected") {
+                } else if (
+                    pc.connectionState === "disconnected" ||
+                    pc.connectionState === "failed"
+                ) {
                     onConnectionChange("disconnected");
-                }
-                if (pc.connectionState === "failed") {
-                    onConnectionChange("failed");
                 }
             };
 

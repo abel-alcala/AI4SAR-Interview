@@ -15,6 +15,8 @@ import { useAuth } from "react-oidc-context";
 type MessageType = Message["type"];
 type MessageMap = { [K in MessageType]: Extract<Message, { type: K }> };
 
+const MAX_RECONNECTS = 5;
+
 export function useAuthenticatedWebSocket(projectId?: string) {
     const [connectionStatus, setConnectionStatus] = useState<
         "disconnected" | "connecting" | "connected"
@@ -22,6 +24,7 @@ export function useAuthenticatedWebSocket(projectId?: string) {
     const connectionStatusRef = useRef<
         "disconnected" | "connecting" | "connected"
     >("disconnected");
+    const reconnectAttemptsRef = useRef(0);
 
     // Keep ref in sync with state
     // This is for our functions that we define and that are captured.
@@ -111,6 +114,7 @@ export function useAuthenticatedWebSocket(projectId?: string) {
                 console.log(
                     "WebSocket connected with ticket-based authentication",
                 );
+                reconnectAttemptsRef.current = 0;
                 setConnectionStatus("connected");
             };
 
@@ -153,6 +157,14 @@ export function useAuthenticatedWebSocket(projectId?: string) {
                     setError(
                         `Connection closed: ${event.reason || "Unknown error"}`,
                     );
+                    if (
+                        reconnectAttemptsRef.current < MAX_RECONNECTS &&
+                        projectId &&
+                        auth.isAuthenticated
+                    ) {
+                        reconnectAttemptsRef.current += 1;
+                        setTimeout(() => connect(), 2000);
+                    }
                 }
             };
 
@@ -173,6 +185,7 @@ export function useAuthenticatedWebSocket(projectId?: string) {
     };
 
     const disconnect = () => {
+        reconnectAttemptsRef.current = MAX_RECONNECTS; // prevent reconnect on intentional close
         if (wsRef.current) {
             wsRef.current.close(1000, "User disconnected");
             wsRef.current = null;
